@@ -7,8 +7,41 @@
 
 ## Overview
 
-This repository will stay in sync with your deployed chats on [v0.dev](https://v0.dev).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.dev](https://v0.dev).
+This repository contains a GitHub Repository Explorer with AI-powered issue guidance, structured as a full-stack application.
+
+## Project Structure
+
+\`\`\`
+├── client/          # Frontend Next.js application
+│   ├── app/         # Next.js App Router pages and components
+│   ├── components/  # Reusable UI components
+│   └── ...         # Other frontend assets
+├── server/          # Backend API services
+└── README.md
+\`\`\`
+
+## Frontend (Client)
+
+The frontend is built with:
+- **Next.js 15** with App Router
+- **TypeScript** for type safety
+- **Tailwind CSS** for styling
+- **shadcn/ui** for UI components
+- **React Markdown** for rendering GitHub issue content
+
+### Features
+- GitHub repository search and exploration
+- Issue filtering and sorting
+- AI-powered issue assistance chat
+- Responsive design with dark theme
+
+## Backend (Server)
+
+The backend will contain API services for:
+- GitHub API integration
+- AI/ML services for issue analysis
+- Authentication and user management
+- Data processing and caching
 
 ## Deployment
 
@@ -28,3 +61,17 @@ Continue building your app on:
 2. Deploy your chats from the v0 interface
 3. Changes are automatically pushed to this repository
 4. Vercel deploys the latest version from this repository
+
+## Development
+
+### Frontend Development
+\`\`\`bash
+cd client
+npm install
+npm run dev
+\`\`\`
+
+### Backend Development
+\`\`\`bash
+cd server
+# Backend setup instructions will be added here
