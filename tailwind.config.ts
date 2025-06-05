@@ -5,7 +5,7 @@ const config = {
   ...defaultConfig,
   content: [
     ...defaultConfig.content,
-    "./app/client/**/*.{js,ts,jsx,tsx,mdx}",
+    "./app/client/**/*.{js,ts,jsx,tsx,mdx}", // Scan the new client directory
     "./app/layout.tsx", // Keep layout.tsx as it's at the root app level
     "./app/loading.tsx", // Keep loading.tsx as it's at the root app level
     "./*.{js,ts,jsx,tsx,mdx}",
