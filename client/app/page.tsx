@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
-import { Search, Star, GitFork, Eye, Filter, ArrowDownUp } from "lucide-react" // Added ArrowDownUp icon
+import { Search, Star, GitFork, Eye, Filter, ArrowDownUp } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -33,9 +33,9 @@ export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [repositories, setRepositories] = useState<Repository[]>([])
   const [loading, setLoading] = useState(false)
-  const [sortBy, setSortBy] = useState("stars") // Corresponds to selectedSort
-  const [language, setLanguage] = useState("all") // Corresponds to selectedLanguage
-  const [selectedTopic, setSelectedTopic] = useState("all") // New state for topic filter
+  const [sortBy, setSortBy] = useState("stars")
+  const [language, setLanguage] = useState("all")
+  const [selectedTopic, setSelectedTopic] = useState("all")
 
   const [showExamples, setShowExamples] = useState(true)
 
@@ -145,7 +145,7 @@ export default function HomePage() {
     setLoading(true)
     try {
       const languageFilter = language !== "all" ? `+language:${language}` : ""
-      const topicFilter = selectedTopic !== "all" ? `+topic:${selectedTopic}` : "" // New topic filter
+      const topicFilter = selectedTopic !== "all" ? `+topic:${selectedTopic}` : ""
       const response = await fetch(
         `https://api.github.com/search/repositories?q=${encodeURIComponent(searchQuery)}${languageFilter}${topicFilter}&sort=${sortBy}&order=desc&per_page=20`,
       )
@@ -164,7 +164,6 @@ export default function HomePage() {
   }
 
   useEffect(() => {
-    // Only trigger search if a query is active
     if (searchQuery.trim()) {
       const debounceTimer = setTimeout(() => {
         searchRepositories()
@@ -185,7 +184,6 @@ export default function HomePage() {
           </p>
         </div>
 
-        {/* Search and Filters */}
         <div className="max-w-4xl mx-auto mb-12">
           <form onSubmit={handleSearch} className="space-y-6">
             <div className="relative">
@@ -205,12 +203,10 @@ export default function HomePage() {
               </Button>
             </div>
 
-            {/* Filters and Sort Section - Minimalist Design */}
             <div className="flex flex-wrap justify-center gap-4">
-              {/* Filter by Language */}
               <Select value={language} onValueChange={setLanguage}>
                 <SelectTrigger className="w-full md:w-[180px] h-12 bg-[#292f36] border-[#515b65] rounded-lg text-[#f3f3f3] flex items-center gap-2 pl-4">
-                  <Filter className="h-5 w-5 text-[#515b65]" /> {/* Changed icon color */}
+                  <Filter className="h-5 w-5 text-[#515b65]" />
                   <SelectValue placeholder="Language" />
                 </SelectTrigger>
                 <SelectContent className="bg-[#292f36] border-[#515b65] rounded-lg shadow-lg">
@@ -265,10 +261,9 @@ export default function HomePage() {
                 </SelectContent>
               </Select>
 
-              {/* Filter by Topic */}
               <Select value={selectedTopic} onValueChange={setSelectedTopic}>
                 <SelectTrigger className="w-full md:w-[180px] h-12 bg-[#292f36] border-[#515b65] rounded-lg text-[#f3f3f3] flex items-center gap-2 pl-4">
-                  <Filter className="h-5 w-5 text-[#515b65]" /> {/* Changed icon color */}
+                  <Filter className="h-5 w-5 text-[#515b65]" />
                   <SelectValue placeholder="Topic" />
                 </SelectTrigger>
                 <SelectContent className="bg-[#292f36] border-[#515b65] rounded-lg shadow-lg">
@@ -311,10 +306,9 @@ export default function HomePage() {
                 </SelectContent>
               </Select>
 
-              {/* Sort By */}
               <Select value={sortBy} onValueChange={setSortBy}>
                 <SelectTrigger className="w-full md:w-[180px] h-12 bg-[#292f36] border-[#515b65] rounded-lg text-[#f3f3f3] flex items-center gap-2 pl-4">
-                  <ArrowDownUp className="h-5 w-5 text-[#515b65]" /> {/* Changed icon color */}
+                  <ArrowDownUp className="h-5 w-5 text-[#515b65]" />
                   <SelectValue placeholder="Sort by" />
                 </SelectTrigger>
                 <SelectContent className="bg-[#292f36] border-[#515b65] rounded-lg shadow-lg">
@@ -342,7 +336,6 @@ export default function HomePage() {
           </form>
         </div>
 
-        {/* Repository Results */}
         <div className="max-w-7xl mx-auto">
           {loading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
