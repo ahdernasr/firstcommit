@@ -3,7 +3,13 @@ import defaultConfig from "shadcn/ui/tailwind.config"
 
 const config = {
   ...defaultConfig,
-  content: [...defaultConfig.content, "./pages/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}", "*.{js,ts,jsx,tsx,mdx}"],
+  content: [
+    ...defaultConfig.content,
+    "./app/client/**/*.{js,ts,jsx,tsx,mdx}",
+    "./app/layout.tsx", // Keep layout.tsx as it's at the root app level
+    "./app/loading.tsx", // Keep loading.tsx as it's at the root app level
+    "./*.{js,ts,jsx,tsx,mdx}",
+  ],
   theme: {
     ...defaultConfig.theme,
     container: {

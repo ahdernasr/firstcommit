@@ -4,12 +4,12 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import { Search, Star, GitFork, Eye, Filter, ArrowDownUp } from "lucide-react" // Added ArrowDownUp icon
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Skeleton } from "@/components/ui/skeleton"
+import { Input } from "@/client/components/ui/input"
+import { Button } from "@/client/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/client/components/ui/card"
+import { Badge } from "@/client/components/ui/badge"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/client/components/ui/select"
+import { Skeleton } from "@/client/components/ui/skeleton"
 import Link from "next/link"
 
 interface Repository {
