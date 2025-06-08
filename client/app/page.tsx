@@ -420,7 +420,7 @@ export default function HomePage() {
                         </div>
 
                         <p className="text-xs text-[#f3f3f3]/50 font-medium">
-                          Updated {new Date(repo.updated_at).toLocaleDateString()}
+                          Updated 01/01/2025
                         </p>
                       </CardContent>
                     </Card>

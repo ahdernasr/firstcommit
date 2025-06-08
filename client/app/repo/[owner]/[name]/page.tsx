@@ -508,7 +508,7 @@ export default function RepoPage() {
                                   {issue.body && (
                                     <div className="text-sm text-[#f3f3f3]/70 line-clamp-2 leading-relaxed overflow-hidden">
                                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                        {issue.body.substring(0, 200)}...
+                                        {issue.body.substring(0, 200) + "..."}
                                       </ReactMarkdown>
                                     </div>
                                   )}
