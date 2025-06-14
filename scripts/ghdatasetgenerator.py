@@ -73,6 +73,10 @@ if SA_KEY_PATH:
 else:
     storage_client = storage.Client(project=PROJECT_ID)
     bigquery_client = bigquery.Client(project=PROJECT_ID)
+    # ── expand urllib3 connection pool so 20 GCS uploads can reuse sockets ──
+    from requests.adapters import HTTPAdapter
+    from google.cloud.storage._http import _HTTP
+    _HTTP.session.adapters["https://"] = HTTPAdapter(pool_maxsize=40)
 
 # GitHub API settings
 GITHUB_API = "https://api.github.com"
@@ -344,7 +348,7 @@ def main(desired: int):
         return False
     success = 0
     try:
-        with ThreadPoolExecutor(max_workers=10) as pool:
+        with ThreadPoolExecutor(max_workers=20) as pool:
             for ok in pool.map(upload_task, tasks):
                 if ok:
                     success += 1
