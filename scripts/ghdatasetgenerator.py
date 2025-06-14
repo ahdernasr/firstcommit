@@ -104,7 +104,7 @@ BLACKLIST_REPOS = {
 BLACKLIST_REPOS_LOWER = {r.lower() for r in BLACKLIST_REPOS}
 GOOD_LICENSES = {"MIT","Apache-2.0","BSD-3-Clause","GPL-3.0","LGPL-3.0"}
 
-DEFAULT_DESIRED = int(os.getenv("DESIRED_REPOS", "25"))
+DEFAULT_DESIRED = int(os.getenv("DESIRED_REPOS", "5"))
 
 def should_include(repo):
     # Basic filters
