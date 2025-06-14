@@ -12,7 +12,29 @@ from git import Repo
 from google.cloud import storage, bigquery
 from google.oauth2 import service_account
 from google.api_core.exceptions import NotFound
+from requests.exceptions import ReadTimeout
 import shutil
+from concurrent.futures import ThreadPoolExecutor
+
+# Directories to skip (generated or vendored)
+GENERATED_DIRS = {"vendor", "node_modules", "third_party", "build", "dist", "target"}
+
+# Allowed file extensions and special filenames
+ALLOWED_EXTENSIONS = {
+    # Common scripting & compiled languages
+    ".py", ".js", ".ts", ".go", ".java", ".kt", ".swift",
+    ".cpp", ".c", ".h", ".hpp", ".cc", ".cxx", ".mm",
+    ".rs", ".cs", ".rb", ".php", ".dart", ".lua", ".scala",
+    ".hs", ".erl", ".ex", ".exs", ".r", ".jl", ".m", ".mm",
+    ".kt", ".groovy", ".clj", ".cljc", ".cljx",
+    ".cr", ".vb", ".vbs", ".fs", ".fsx", ".ml",
+    ".mli", ".adb", ".ads", ".pas", ".f", ".f90", ".f95",
+    ".asm", ".s", ".ps1", ".bat", ".cmd", ".sh", ".zsh", ".fish",
+    ".sql", ".psql",
+
+    # Markup & config
+    ".json", ".yaml", ".yml", ".toml", ".xml", ".md", ".html", ".htm"
+}
 
 # Load environment variables
 BASE_DIR = Path(__file__).resolve().parent
@@ -33,7 +55,9 @@ if SA_KEY_PATH:
         SA_KEY_PATH,
         scopes=["https://www.googleapis.com/auth/cloud-platform"],
     )
-    cred.universe_domain = "googleapis.com"
+    # Patch universe_domain for storage compatibility
+    # set private attribute since the property has no setter
+    cred._universe_domain = "googleapis.com"
     storage_client = storage.Client(project=PROJECT_ID, credentials=cred)
     bigquery_client = bigquery.Client(project=PROJECT_ID, credentials=cred)
 else:
@@ -58,9 +82,12 @@ BLACKLIST_KEYWORDS = {
     "cheatsheet","interview","books","how-to","howto","beginners","best","33"
 }
 BLACKLIST_REPOS = {
-    "cs-self-learning","hello-algo","HelloGitHub","learn-regex",
-    "javascript-algorithms","leetcode","leetcode-master","hiring-without-whiteboards"
+    "cs-self-learning", "hello-algo", "HelloGitHub", "learn-regex",
+    "javascript-algorithms", "leetcode", "leetcode-master",
+    "hiring-without-whiteboards", "freecodecamp"
 }
+# Ensure blacklist is case-insensitive
+BLACKLIST_REPOS_LOWER = {r.lower() for r in BLACKLIST_REPOS}
 GOOD_LICENSES = {"MIT","Apache-2.0","BSD-3-Clause","GPL-3.0","LGPL-3.0"}
 
 def should_include(repo):
@@ -81,7 +108,10 @@ def should_include(repo):
     desc = repo.get("description") or ""
     name_desc = f"{name} {desc}".lower()
     if any(k in name_desc for k in BLACKLIST_KEYWORDS): return False
-    if repo.get("name") in BLACKLIST_REPOS: return False
+    # Case-insensitive repo name blacklist
+    name_lower = repo.get("name", "").lower()
+    if name_lower in BLACKLIST_REPOS_LOWER:
+        return False
     # Contributor count
     since = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=365)).isoformat()+"Z"
     url = f"{GITHUB_API}/repos/{repo['full_name']}/contributors?per_page=100&since={since}"
@@ -148,7 +178,7 @@ def clone_and_save(repo):
     return meta
 
 def main():
-    desired = 3
+    desired = 2
     # Clear out the repos directory on each run
     if OUT_DIR.exists():
         for d in OUT_DIR.iterdir():
@@ -202,17 +232,24 @@ def main():
             for p in d.rglob("*"):
                 p.unlink()
             d.rmdir()
-    # Write repos.json as NDJSON
+    # Write repos.json as a proper JSON array
     out_json = BASE_DIR / "repos.json"
     with open(out_json, "w", encoding="utf-8") as f:
+        json.dump(selected, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+    print(f"Wrote {len(selected)} repos to {out_json}")
+    # Also write NDJSON for BigQuery load
+    ndjson_path = BASE_DIR / "repos_ndjson.jsonl"
+    with open(ndjson_path, "w", encoding="utf-8") as nd_f:
         for repo in selected:
-            f.write(json.dumps(repo) + "\n")
-    print(f"Wrote {len(selected)} repos (NDJSON) to {out_json}")
+            nd_f.write(json.dumps(repo) + "\n")
+    print(f"Wrote {len(selected)} repos to {ndjson_path} (NDJSON)")
     if not selected:
         print("No repositories selected; skipping GCS upload and BigQuery load.")
         return
     # Upload to GCS
-    gcs_src = str(out_json)
+    # Use NDJSON for BigQuery
+    gcs_src = str(ndjson_path)
     gcs_dest = "input/repos.json"
     print(f"Uploading to gs://{GCS_BUCKET}/{gcs_dest}")
     bucket = storage_client.bucket(GCS_BUCKET)
@@ -223,24 +260,47 @@ def main():
     print(f"Clearing existing objects in gs://{GCS_BUCKET}/input/")
     blobs = list(bucket.list_blobs(prefix="input/"))
     if blobs:
-        bucket.delete_blobs(blobs)
+        print(f"Deleting {len(blobs)} objects in parallel...")
+        with ThreadPoolExecutor(max_workers=20) as executor:
+            list(executor.map(lambda blob: blob.delete(), blobs))
         print(f"Deleted {len(blobs)} objects.")
     blob = bucket.blob(gcs_dest)
     blob.upload_from_filename(gcs_src)
 
-    # Upload cloned repository files to GCS via Python client
-    print("Uploading cloned repository files to GCS...")
-    files_uploaded = 0
-    for root, _, files in os.walk(OUT_DIR):
+    # Upload cloned repository files to GCS in parallel
+    print("Uploading cloned repository files to GCS in parallel…")
+    tasks = []
+    for root, dirs, files in os.walk(OUT_DIR):
+        # Skip generated or vendored directories
+        dirs[:] = [d for d in dirs if d not in GENERATED_DIRS]
         for fname in files:
+            ext = os.path.splitext(fname)[1].lower()
+            if ext not in ALLOWED_EXTENSIONS:
+                continue
             local_path = os.path.join(root, fname)
-            rel_path = os.path.relpath(local_path, OUT_DIR)
-            gcs_repo_dest = f"input/repos/{rel_path}"
-            print(f"Uploading {local_path} to gs://{GCS_BUCKET}/{gcs_repo_dest}")
-            repo_blob = bucket.blob(gcs_repo_dest)
-            repo_blob.upload_from_filename(local_path)
-            files_uploaded += 1
-    print(f"Uploaded {files_uploaded} cloned repository files to GCS.")
+            rel_path   = os.path.relpath(local_path, OUT_DIR)
+            code_dest  = f"input/repos/{rel_path}"
+            tasks.append((local_path, code_dest))
+    def upload_task(args):
+        local_path, dest = args
+        blob = bucket.blob(dest)
+        print(f"Uploading {local_path} to gs://{GCS_BUCKET}/{dest}")
+        for attempt in range(3):
+            try:
+                blob.upload_from_filename(local_path, timeout=300)
+                print(f"✔ Uploaded {local_path}")
+                return True
+            except ReadTimeout:
+                print(f"⏱ Timeout uploading {local_path}, retrying {attempt+1}/3…")
+                time.sleep(2 ** attempt)
+        print(f"❌ Failed to upload {local_path} after 3 retries")
+        return False
+    success = 0
+    with ThreadPoolExecutor(max_workers=20) as pool:
+        for ok in pool.map(upload_task, tasks):
+            if ok:
+                success += 1
+    print(f"Uploaded {success}/{len(tasks)} files.")
     # Ensure BigQuery dataset exists
     dataset_ref = bigquery_client.dataset(BQ_DATASET)
     try:
