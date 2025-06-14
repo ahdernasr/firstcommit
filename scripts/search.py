@@ -1,109 +1,136 @@
 #!/usr/bin/env python3
+"""
+search.py — simple CLI to run vector search against `repos_code` or `repos_meta`
+collections in MongoDB Atlas.
 
+Examples
+--------
+# Search repository metadata
+python search.py -c repos_meta -q "graphql subscription filter" -k 5
+
+# Search code chunks
+python search.py --collection repos_code --query "open csv file in go" --k 10
+"""
+import argparse
+import json
 import os
 import sys
-import json
-from dotenv import load_dotenv
-import requests
-from google.oauth2 import service_account
-from google.auth.transport.requests import Request
-from pymongo import MongoClient
+from pathlib import Path
+
 import certifi
+from dotenv import load_dotenv
+from google.cloud import aiplatform
+from pymongo import MongoClient
 
-# Load environment variables
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env'))
+# ──────────────── environment & clients ─────────────────
+BASE_DIR = Path(__file__).resolve().parent
+load_dotenv("./.env")
 
-# Config
 PROJECT_ID = os.getenv("GCP_PROJECT_ID")
 LOCATION = os.getenv("GCP_LOCATION", "us-central1")
-MODEL = os.getenv("EMBEDDING_MODEL")
-KEYFILE = os.getenv("GCP_KEYFILE_PATH")
-MONGODB_URI = os.getenv("MONGODB_URI")
-DB_NAME = os.getenv("DB_NAME", "vector_db")
-COLLECTION_NAME = os.getenv("COLLECTION_NAME", "repos")
-
-# Authenticate and get access token
-credentials = service_account.Credentials.from_service_account_file(
-    KEYFILE,
-    scopes=["https://www.googleapis.com/auth/cloud-platform"]
+MODEL_NAME = (
+    f"projects/{PROJECT_ID}/locations/{LOCATION}/publishers/google/"
+    "models/text-embedding-005"
 )
-auth_request = Request()
-credentials.refresh(auth_request)
-access_token = credentials.token
 
-# Initialize MongoDB client
-mongo_client = MongoClient(MONGODB_URI, tlsCAFile=certifi.where())
-db = mongo_client[DB_NAME]
-collection = db[COLLECTION_NAME]
+MONGO_URI = os.getenv("MONGODB_URI")
+MONGO_DB = os.getenv("MONGO_DB_NAME", "repos")
 
-def get_embedding(text: str):
-    """Generate embedding vector for the given text via Vertex AI REST."""
-    endpoint = (
-        f"https://{LOCATION}-aiplatform.googleapis.com/v1/"
-        f"projects/{PROJECT_ID}/locations/{LOCATION}/publishers/google/"
-        f"models/{MODEL}:predict"
+if not PROJECT_ID or not MONGO_URI:
+    sys.stderr.write(
+        "Error: GCP_PROJECT_ID and MONGODB_URI must be set in your .env file\n"
     )
-    payload = {
-        "instances": [
-            {
-                "task_type": "RETRIEVAL_DOCUMENT",
-                "title": "query",
-                "content": text
-            }
-        ]
-    }
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json; charset=utf-8"
-    }
-    response = requests.post(endpoint, headers=headers, json=payload)
-    if not response.ok:
-        print("Embedding request failed:", response.text)
-        response.raise_for_status()
-    result = response.json()
-    return result["predictions"][0]["embeddings"]["values"]
+    sys.exit(1)
 
-def vector_search(query: str, k: int = 10):
-    """Run a vector similarity search on MongoDB."""
-    vec = get_embedding(query)
+aiplatform.init(project=PROJECT_ID, location=LOCATION)
+mongo = MongoClient(MONGO_URI, tls=True, tlsCAFile=certifi.where())
+db = mongo[MONGO_DB]
+
+
+# ──────────────── helper functions ──────────────────────
+def embed_text(text: str) -> list[float]:
+    """Embed a single string using Vertex AI text‑embedding‑005."""
+    client = aiplatform.gapic.PredictionServiceClient(
+        client_options={"api_endpoint": f"{LOCATION}-aiplatform.googleapis.com"}
+    )
+    resp = client.predict(
+        endpoint=MODEL_NAME,
+        instances=[{"content": text}],
+        parameters={},
+    )
+    # Vertex AI returns a protobuf RepeatedScalarField; cast to plain list
+    values = resp.predictions[0]["embeddings"]["values"]  # type: ignore
+    return [float(x) for x in values]
+
+
+def vector_search(
+    collection: str,
+    query_vec: list[float],
+    k: int = 10,
+) -> list[dict]:
+    """Run a $vectorSearch aggregation and return the top‑k documents."""
     pipeline = [
         {
             "$vectorSearch": {
-                "index": "default",
-                "queryVector": vec,
+                "index": "vector_index",
                 "path": "embedding",
+                "queryVector": query_vec,
+                "numCandidates": k * 10,
                 "limit": k,
-                "numCandidates": 500
+                "similarity": "cosine",
             }
         },
-        {"$project": {"full_name": 1, "description": 1, "score": {"$meta": "vectorSearchScore"}}},
-        {"$limit": k}
+        {
+            "$project": {
+                "_id": 1,
+                "name": 1,
+                "description": 1,
+                "file": 1,  # only present in repos_code
+                "score": {"$meta": "vectorSearchScore"},
+            }
+        },
     ]
-    results = list(collection.aggregate(pipeline))
-    if not results:
-        print("No matching results found.")
-    else:
-        print(f"Found {len(results)} results.\n")
-    for idx, doc in enumerate(results, 1):
-        print(f"{idx}. {doc.get('full_name', doc.get('name', 'N/A'))} (score: {doc.get('score', 0):.4f})\n   {doc.get('description','')}\n")
+    return list(db[collection].aggregate(pipeline))
 
-def debug_check_embeddings():
-    """Print how many documents have embeddings and show one example."""
-    count = collection.count_documents({"embedding": {"$exists": True}})
-    print(f"Documents with embedding: {count}")
-    if count > 0:
-        doc = collection.find_one({"embedding": {"$exists": True}})
-        print("Example document:")
-        print(f"Name: {doc.get('full_name', doc.get('name'))}")
-        print(f"First 10 dims: {doc['embedding'][:10]}")
+
+# ──────────────── CLI parsing & entry point ─────────────
+def parse_args() -> argparse.Namespace:
+    ap = argparse.ArgumentParser(description="Vector search CLI.")
+    ap.add_argument(
+        "-c",
+        "--collection",
+        choices=["repos_code", "repos_meta"],
+        required=True,
+        help="Target collection to search.",
+    )
+    ap.add_argument("-q", "--query", required=True, help="Natural‑language query.")
+    ap.add_argument(
+        "-k",
+        type=int,
+        default=10,
+        help="Number of results to return (default 10)."
+    )
+    return ap.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+
+    print(f"Embedding query: {args.query!r}")
+    q_vec = embed_text(args.query)
+
+    print(f"Running vector search on '{args.collection}' …")
+    hits = vector_search(args.collection, q_vec, args.k)
+
+    if not hits:
+        print("No results found.")
+        return
+
+    for rank, doc in enumerate(hits, 1):
+        score = doc.pop("score", 0)
+        print(f"\n#{rank}  (score={score:.4f})")
+        print(json.dumps(doc, indent=2, default=str)[:800])  # truncate long fields
+
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python search.py \"search text\" [k]")
-        sys.exit(1)
-    query = sys.argv[1]
-    k = int(sys.argv[2]) if len(sys.argv) > 2 else 10
-    print("Running debug check...\n")
-    debug_check_embeddings()
-    print("\nRunning vector search...\n")
-    vector_search(query, k)
+    main()

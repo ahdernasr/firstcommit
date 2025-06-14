@@ -9,12 +9,15 @@ from pathlib import Path
 from dotenv import load_dotenv
 import requests
 from git import Repo
+from git.exc import GitCommandError
 from google.cloud import storage, bigquery
 from google.oauth2 import service_account
 from google.api_core.exceptions import NotFound
 from requests.exceptions import ReadTimeout
 import shutil
 from concurrent.futures import ThreadPoolExecutor
+import logging
+import argparse
 
 # Directories to skip (generated or vendored)
 GENERATED_DIRS = {"vendor", "node_modules", "third_party", "build", "dist", "target"}
@@ -39,6 +42,13 @@ ALLOWED_EXTENSIONS = {
 # Load environment variables
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv("./.env")
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%H:%M:%S",
+)
+log = logging.getLogger(__name__)
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 GCS_BUCKET = os.getenv("GCS_BUCKET", "ai-in-action-repo-bucket")
@@ -79,16 +89,18 @@ OUT_DIR.mkdir(exist_ok=True)
 # Blacklists
 BLACKLIST_KEYWORDS = {
     "awesome","roadmap","guide","handbook","resources","list","curated",
-    "cheatsheet","interview","books","how-to","howto","beginners","best","33"
+    "cheatsheet","interview","books","how-to","howto","beginners","best","33", "fuck"
 }
 BLACKLIST_REPOS = {
     "cs-self-learning", "hello-algo", "HelloGitHub", "learn-regex",
     "javascript-algorithms", "leetcode", "leetcode-master",
-    "hiring-without-whiteboards", "freecodecamp"
+    "hiring-without-whiteboards", "freecodecamp", "computer-science"
 }
 # Ensure blacklist is case-insensitive
 BLACKLIST_REPOS_LOWER = {r.lower() for r in BLACKLIST_REPOS}
 GOOD_LICENSES = {"MIT","Apache-2.0","BSD-3-Clause","GPL-3.0","LGPL-3.0"}
+
+DEFAULT_DESIRED = int(os.getenv("DESIRED_REPOS", "25"))
 
 def should_include(repo):
     # Basic filters
@@ -125,8 +137,29 @@ def clone_and_save(repo):
     meta_path = repo_dir / "metadata.json"
     if repo_dir.exists() and meta_path.exists():
         return json.loads(meta_path.read_text())
+    # If a previous attempt left a partial dir (no metadata), wipe it
+    if repo_dir.exists() and not meta_path.exists():
+        log.info("Removing stale directory %s from previous failed clone…", repo_dir)
+        shutil.rmtree(repo_dir, ignore_errors=True)
     # Clone
-    Repo.clone_from(repo["clone_url"], str(repo_dir), depth=1)
+    try:
+        # First attempt: normal shallow clone
+        Repo.clone_from(repo["clone_url"], str(repo_dir), depth=1)
+    except GitCommandError as e:
+        # Common failure when git‑lfs is not installed: retry with LFS disabled
+        if "git-lfs" in str(e) or "filter-process" in str(e):
+            log.info("git‑lfs not available for %s; retrying without LFS...", repo['full_name'])
+            os.environ["GIT_LFS_SKIP_SMUDGE"] = "1"
+            try:
+                Repo.clone_from(repo["clone_url"], str(repo_dir), depth=1)
+            except GitCommandError as e2:
+                log.warning("Clone still failed for %s: %s. Skipping.", repo['full_name'], e2)
+                return None
+            finally:
+                os.environ.pop("GIT_LFS_SKIP_SMUDGE", None)
+        else:
+            log.warning("Clone failed for %s: %s. Skipping.", repo['full_name'], e)
+            return None
     # Fetch languages
     lang = {}
     r = requests.get(f"{GITHUB_API}/repos/{repo['full_name']}/languages", headers=HEADERS)
@@ -177,98 +210,108 @@ def clone_and_save(repo):
     meta_path.write_text(json.dumps(meta, indent=2))
     return meta
 
-def main():
-    desired = 2
+
+# ── Parallel clone helper ──
+def clone_repos_parallel(repos, max_workers: int = 8):
+    """Clone repos concurrently and return list of metadata dicts."""
+    if not repos:
+        return []
+    log.info("Cloning %d repos in parallel (max_workers=%d)…", len(repos), max_workers)
+    metas = []
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        for meta in pool.map(clone_and_save, repos):
+            if meta:
+                metas.append(meta)
+    return metas
+
+def main(desired: int):
+    overall_start = time.perf_counter()
     # Clear out the repos directory on each run
     if OUT_DIR.exists():
         for d in OUT_DIR.iterdir():
             if d.is_dir():
                 shutil.rmtree(d)
-    # First, load any already-cloned repos' metadata
     selected = []
-    if OUT_DIR.exists():
-        for d in OUT_DIR.iterdir():
-            meta_path = d / "metadata.json"
-            if meta_path.exists():
-                try:
-                    selected.append(json.loads(meta_path.read_text()))
-                except Exception as e:
-                    print(f"Failed to load metadata for {d.name}: {e}")
-    # If no local repos, perform GitHub search & clone
-    if not selected:
-        seen = set()
-        page = 1
-        per_page = 100
-        while len(selected) < desired:
-            q = "stars:>100"
-            r = requests.get(
-                f"{GITHUB_API}/search/repositories",
-                params={"q": q, "sort": "stars", "order": "desc", "per_page": per_page, "page": page},
-                headers=HEADERS,
-            )
-            if not r.ok:
-                print(f"GitHub search failed: {r.status_code}")
-                break
-            items = r.json().get("items", [])
-            for repo in items:
-                full = repo["full_name"]
-                if full in seen:
-                    continue
-                seen.add(full)
-                if should_include(repo):
-                    meta = clone_and_save(repo)
-                    if meta:
-                        selected.append(meta)
-                        if len(selected) >= desired:
-                            break
-            page += 1
-    else:
-        print(f"Loaded {len(selected)} repos from local directory")
+    seen = set()
+    page = 1
+    per_page = 100
+    repos_to_clone = []
+    while len(selected) + len(repos_to_clone) < desired:
+        q = "stars:>100"
+        r = requests.get(
+            f"{GITHUB_API}/search/repositories",
+            params={
+                "q": q,
+                "sort": "stars",
+                "order": "desc",
+                "per_page": per_page,
+                "page": page,
+            },
+            headers=HEADERS,
+        )
+        if not r.ok:
+            log.warning("GitHub search failed: %s", r.status_code)
+            break
+        items = r.json().get("items", [])
+        if not items:
+            break  # no more results
+
+        for repo in items:
+            full = repo["full_name"]
+            if full in seen:
+                continue
+            seen.add(full)
+            if should_include(repo):
+                repos_to_clone.append(repo)
+                if len(selected) + len(repos_to_clone) >= desired:
+                    break
+        page += 1
+
+    # ── clone the batch concurrently ──
+    selected.extend(clone_repos_parallel(repos_to_clone))
     # Trim to desired count
     selected = selected[:desired]
     # Cleanup
     for d in OUT_DIR.iterdir():
         if d.is_dir() and d.name not in {m["name"] for m in selected}:
-            for p in d.rglob("*"):
-                p.unlink()
-            d.rmdir()
+            log.info("Removing obsolete repo directory %s…", d)
+            shutil.rmtree(d, ignore_errors=True)
     # Write repos.json as a proper JSON array
     out_json = BASE_DIR / "repos.json"
     with open(out_json, "w", encoding="utf-8") as f:
         json.dump(selected, f, indent=2, ensure_ascii=False)
         f.write("\n")
-    print(f"Wrote {len(selected)} repos to {out_json}")
     # Also write NDJSON for BigQuery load
     ndjson_path = BASE_DIR / "repos_ndjson.jsonl"
     with open(ndjson_path, "w", encoding="utf-8") as nd_f:
         for repo in selected:
             nd_f.write(json.dumps(repo) + "\n")
-    print(f"Wrote {len(selected)} repos to {ndjson_path} (NDJSON)")
     if not selected:
-        print("No repositories selected; skipping GCS upload and BigQuery load.")
+        elapsed = time.perf_counter() - overall_start
+        log.info("Total runtime: %.2f s", elapsed)
         return
     # Upload to GCS
     # Use NDJSON for BigQuery
     gcs_src = str(ndjson_path)
     gcs_dest = "input/repos.json"
-    print(f"Uploading to gs://{GCS_BUCKET}/{gcs_dest}")
+    log.info("Uploading to gs://%s/%s", GCS_BUCKET, gcs_dest)
     bucket = storage_client.bucket(GCS_BUCKET)
     if not bucket.exists():
-        print(f"Bucket {GCS_BUCKET} does not exist. Creating it...")
+        log.info("Bucket %s does not exist. Creating it...", GCS_BUCKET)
         bucket = storage_client.create_bucket(GCS_BUCKET, location=LOCATION)
     # Clear existing objects under the input/ prefix
-    print(f"Clearing existing objects in gs://{GCS_BUCKET}/input/")
+    log.info("Clearing existing objects in gs://%s/input/", GCS_BUCKET)
     blobs = list(bucket.list_blobs(prefix="input/"))
     if blobs:
-        print(f"Deleting {len(blobs)} objects in parallel...")
+        log.info("Deleting %d objects in parallel...", len(blobs))
         with ThreadPoolExecutor(max_workers=20) as executor:
             list(executor.map(lambda blob: blob.delete(), blobs))
-        print(f"Deleted {len(blobs)} objects.")
+        log.info("Deleted %d objects.", len(blobs))
     blob = bucket.blob(gcs_dest)
     blob.upload_from_filename(gcs_src)
 
     # Upload cloned repository files to GCS in parallel
-    print("Uploading cloned repository files to GCS in parallel…")
+    log.info("Uploading cloned repository files to GCS in parallel…")
     tasks = []
     for root, dirs, files in os.walk(OUT_DIR):
         # Skip generated or vendored directories
@@ -284,41 +327,59 @@ def main():
     def upload_task(args):
         local_path, dest = args
         blob = bucket.blob(dest)
-        print(f"Uploading {local_path} to gs://{GCS_BUCKET}/{dest}")
-        for attempt in range(3):
+        log.debug("Uploading %s", local_path)
+
+        for attempt in range(4):
             try:
                 blob.upload_from_filename(local_path, timeout=300)
-                print(f"✔ Uploaded {local_path}")
+                log.debug("✔ Uploaded %s", local_path)
                 return True
-            except ReadTimeout:
-                print(f"⏱ Timeout uploading {local_path}, retrying {attempt+1}/3…")
+            except (ReadTimeout, requests.exceptions.RequestException,
+                    ConnectionResetError, Exception) as exc:
+                # For unexpected exceptions, log and retry a few times
+                log.warning("Upload failed for %s (attempt %d/4): %s",
+                            local_path, attempt + 1, exc)
                 time.sleep(2 ** attempt)
-        print(f"❌ Failed to upload {local_path} after 3 retries")
+        log.error("Failed to upload %s after 4 attempts", local_path)
         return False
     success = 0
-    with ThreadPoolExecutor(max_workers=20) as pool:
-        for ok in pool.map(upload_task, tasks):
-            if ok:
-                success += 1
-    print(f"Uploaded {success}/{len(tasks)} files.")
+    try:
+        with ThreadPoolExecutor(max_workers=10) as pool:
+            for ok in pool.map(upload_task, tasks):
+                if ok:
+                    success += 1
+    except Exception as exc:
+        log.error("Unexpected thread pool error during uploads: %s", exc)
+    log.info("Uploaded %d/%d files.", success, len(tasks))
     # Ensure BigQuery dataset exists
     dataset_ref = bigquery_client.dataset(BQ_DATASET)
     try:
         bigquery_client.get_dataset(dataset_ref)
     except NotFound:
-        print(f"Dataset {BQ_DATASET} not found. Creating it...")
+        log.info("Dataset %s not found. Creating it...", BQ_DATASET)
         dataset = bigquery.Dataset(dataset_ref)
         dataset.location = LOCATION
         bigquery_client.create_dataset(dataset, exists_ok=True)
     # Load into BigQuery
-    print(f"Loading into BigQuery {BQ_DATASET}.{BQ_TABLE}")
+    log.info("Loading into BigQuery %s.%s", BQ_DATASET, BQ_TABLE)
     table_ref = bigquery_client.dataset(BQ_DATASET).table(BQ_TABLE)
     job = bigquery_client.load_table_from_uri(
         f"gs://{GCS_BUCKET}/{gcs_dest}", table_ref,
         job_config=bigquery.LoadJobConfig(source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON, autodetect=True)
     )
     job.result()
-    print("BigQuery load complete:", job.output_rows)
+    elapsed = time.perf_counter() - overall_start
+    log.info("BigQuery load complete: %s rows", job.output_rows)
+    log.info("Total runtime: %.2f s", elapsed)
 
-if __name__=="__main__":
-    main()
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="GitHub dataset generator")
+    parser.add_argument(
+        "-n",
+        "--desired",
+        type=int,
+        default=DEFAULT_DESIRED,
+        help="Number of repositories to fetch (default: %(default)s)",
+    )
+    args = parser.parse_args()
+    main(args.desired)

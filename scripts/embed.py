@@ -131,11 +131,13 @@ def ingest_predictions_to_mongo_fast(output_prefix: str,
     inserted = 0
     for key, line in zip(key_iter, line_iter):
         emb = json.loads(line)["predictions"][0]["embeddings"]["values"]
-        bulk.append(
-            ReplaceOne({"_id": key},
-                       {"_id": key, "embedding": emb},
-                       upsert=True)
-        )
+
+        doc = {
+            "_id": key,
+            "embedding": emb,
+        }
+
+        bulk.append(ReplaceOne({"_id": key}, doc, upsert=True))
         if len(bulk) >= batch_size:
             coll.bulk_write(bulk, ordered=False)
             inserted += len(bulk)
@@ -178,14 +180,42 @@ def main():
     with open(metadata_jsonl, "w", encoding="utf-8") as fout_jsonl, \
          open(meta_key_manifest, "w", encoding="utf-8") as fout_keys:
 
-        for obj in federated_meta_coll.find():
+        # Helper to yield individual repo objects, regardless of wrapping shape
+        def yield_repo_objects(cursor):
+            """
+            Handles cases where `repos_meta` is:
+            1. One document per repo   (each is a dict)
+            2. One *wrapper* document whose values are arrays of repos
+            """
+            for doc in cursor:
+                # Case 1: document looks like a repo (has name/description)
+                if isinstance(doc, dict) and ("name" in doc or "description" in doc):
+                    yield doc
+                    continue
+
+                # Case 2: doc is a wrapper; walk its values looking for arrays of repos
+                if isinstance(doc, dict):
+                    for val in doc.values():
+                        if isinstance(val, list):
+                            for maybe_repo in val:
+                                if isinstance(maybe_repo, dict):
+                                    yield maybe_repo
+                # Skip anything else (e.g. primitive types)
+
+        # Iterate over every repo object and write to JSONL + manifest
+        for obj in yield_repo_objects(federated_meta_coll.find()):
             text = " ".join(filter(None, [obj.get("name"), obj.get("description") or ""]))
+            if not text.strip():
+                # Skip empty metadata records
+                continue
+
             fout_jsonl.write(json.dumps({"content": text}) + "\n")
+            # Choose a stable, non‑None identifier; fall back to random hex.
             key = (
-                str(obj.get("_id"))           # Atlas-generated _id if present
-                or obj.get("full_name")       # "owner/repo"
-                or obj.get("name")            # simple repo name
-                or os.urandom(8).hex()        # guaranteed unique fallback
+                obj.get("full_name")                      # e.g. owner/repo
+                or obj.get("name")                        # repo name
+                or (str(obj["_id"]) if obj.get("_id") is not None else None)
+                or os.urandom(8).hex()                    # guaranteed unique
             )
             fout_keys.write(key + "\n")
 
@@ -194,6 +224,10 @@ def main():
     if line_count == 0:
         print("No metadata items to embed; skipping metadata batch job.")
     else:
+        # ─── upload files ───────────────────────────────────────────
+        upload_jsonl_to_gcs(metadata_jsonl, "input/repos_meta.jsonl")
+        upload_jsonl_to_gcs(meta_key_manifest, "input/repos_meta.keys")
+        # ─── run batch job & ingest ────────────────────────────────
         meta_output_dir = run_batch_job("input/repos_meta.jsonl",
                                         "output/repos_meta",
                                         "embed-metadata")
