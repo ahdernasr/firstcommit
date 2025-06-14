@@ -35,6 +35,9 @@ LOCATION = os.getenv("GCP_LOCATION", "us-central1")
 GCS_BUCKET = os.getenv("GCS_BUCKET")
 
 # Vertex AI settings
+
+# --- embedding parameters ----------------------------------------------------
+MAX_CODE_TOKENS = 2048  # keep chunks small enough for Vertex AI batch limits
 MODEL_NAME = f"projects/{PROJECT_ID}/locations/{LOCATION}/publishers/google/models/text-embedding-005"
 
 MONGO_DB = os.getenv("MONGO_DB_NAME", "repos")
@@ -90,7 +93,7 @@ def run_batch_job(input_gcs: str, output_prefix: str, display_name: str):
         instances_format="jsonl",
         predictions_format="jsonl",
         gcs_source=[f"gs://{GCS_BUCKET}/{input_gcs}"],
-        gcs_destination_prefix=f"gs://{GCS_BUCKET}/{output_prefix}"
+        gcs_destination_prefix=f"gs://{GCS_BUCKET}/{output_prefix}",
     )
     job.wait()
     output_dir = job.output_info.gcs_output_directory  # e.g. gs://bucket/output/repos_code/1234567890
@@ -149,7 +152,7 @@ def ingest_predictions_to_mongo_fast(output_prefix: str,
 
     print(f"[FAST] Inserted {inserted} docs into '{collection_name}'")
 
-def chunk_text_by_token_limit(text: str, max_tokens: int = 15000) -> list[str]:
+def chunk_text_by_token_limit(text: str, max_tokens: int = MAX_CODE_TOKENS) -> list[str]:
     """
     Naively chunks text into lists of words, each chunk up to max_tokens words.
     """
@@ -254,7 +257,7 @@ def main():
                     continue
 
                 text = file_path.read_text(encoding="utf-8", errors="ignore")
-                chunks = chunk_text_by_token_limit(text, max_tokens=15000)
+                chunks = chunk_text_by_token_limit(text, max_tokens=MAX_CODE_TOKENS)
 
                 for idx, chunk in enumerate(chunks):
                     key = f"{repo_dir.name}/{file_path.relative_to(repo_dir.parent)}::chunk_{idx}"
