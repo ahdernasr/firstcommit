@@ -3,6 +3,7 @@
 # data
 /scripts/repos
 /scripts/repos.json
+scripts/repos_ndjson.jsonl
 
 # dependencies
 */node_modules
@@ -26,6 +27,8 @@ yarn-error.log*
 
 # Key files
 vertex-key.json
+scripts/scripts-manager-key.json
+server/server-key.json
 
 # vercel
 .vercel
@@ -33,3 +36,5 @@ vertex-key.json
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+scripts/resume_ingest.py
