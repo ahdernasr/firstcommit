@@ -223,17 +223,21 @@ def ingest_predictions_to_mongo_fast(output_prefix: str,
             print(f"[WARN] prediction row {i} has no matching key; skipping")
             continue
 
-        raw_key = keys[i]
+        # Parse the raw_key as JSON
+        key_obj = json.loads(keys[i])
+        real_id = key_obj["_id"]
+        original_file_path = key_obj["file"]
+        original_text = key_obj["text"]
+        
         if collection_name == "repos_meta": # Original logic for metadata
-            if "|" in raw_key:
+            if "|" in real_id:
                 # Metadata keys: '00000042|owner/repo' → owner/repo
-                real_id = raw_key.split("|", 1)[1]
+                real_id = real_id.split("|", 1)[1]
             else:
                 # Metadata keys already have the final id
-                real_id = raw_key
+                real_id = real_id
             repo_id = None # Not applicable for repos_meta itself
         else: # Logic for repos_code
-            real_id = raw_key
             repo_id = get_repo_id_from_chunk_id(real_id)
 
         emb = json.loads(line)["predictions"][0]["embeddings"]["values"]
@@ -244,10 +248,11 @@ def ingest_predictions_to_mongo_fast(output_prefix: str,
         }
         if repo_id: # Only add repo_id if it's extracted (i.e., for code chunks)
             doc["repo_id"] = repo_id
-
-        # For repos_code, we also want to preserve the original file path and text.
-        # This would require modifying the key manifest to include these, or passing them through.
-        # For now, we only add repo_id.
+        
+        # Add the original file path and text for repos_code
+        if collection_name == "repos_code":
+            doc["file"] = original_file_path
+            doc["text"] = original_text
 
         bulk.append(ReplaceOne({"_id": real_id}, doc, upsert=True))
         if len(bulk) >= batch_size:
@@ -323,10 +328,9 @@ def safe_code_chunks(text: str) -> list[str]:
 
 def main():
     overall_start = time.perf_counter()
-    # Reset collections so we start fresh every run
+    # Reset code collection so we start fresh every run, but do NOT clear repos_meta
     db["repos_code"].delete_many({})
-    db["repos_meta"].delete_many({})
-    print("[DEBUG] Cleared repos_code and repos_meta collections")
+    print("[DEBUG] Cleared repos_code collection")
 
     # Use online Gemini embeddings for metadata (small test set)
     embedding_model = TextEmbeddingModel.from_pretrained("gemini-embedding-001")
@@ -356,21 +360,26 @@ def main():
         if not text.strip():
             continue
 
-        # Truncate very long strings to fit quota
+        token_count = len(text.split())
+
         if len(text.encode("utf-8")) > MAX_METADATA_BYTES:
             text = text.encode("utf-8")[:MAX_METADATA_BYTES].decode("utf-8", errors="ignore")
-
-        # Online embedding call with robust retry/back‑off
-        emb = embed_with_retry(embedding_model, text)
-        if emb is None:
-            continue            # skip repo on persistent failure
-        time.sleep(EMBED_SLEEP)  # steady pacing
 
         _id = (
             obj.get("full_name")
             or obj.get("name")
             or str(obj.get("_id") or os.urandom(8).hex())
         )
+
+        # Skip if already embedded
+        if db["repos_meta"].find_one({"_id": _id}):
+            continue
+
+        emb = embed_with_retry(embedding_model, text)
+        if emb is None:
+            continue
+        print(f"[EMBED] {_id}: {token_count} tokens embedded")
+        time.sleep(EMBED_SLEEP)
 
         docs_to_insert.append({"_id": _id, "embedding": emb})
 
@@ -408,13 +417,20 @@ def main():
                 chunks = safe_code_chunks(text)
 
                 for idx, chunk in enumerate(chunks):
-                    key = f"{repo_dir.name}/{file_path.relative_to(repo_dir.parent)}::chunk_{idx}"
+                    # Construct a unique key for the chunk, including file path
+                    chunk_id = f"{repo_dir.name}/{file_path.relative_to(repo_dir.parent)}::chunk_{idx}"
+                    
+                    key_data = {
+                        "_id": chunk_id,
+                        "file": str(file_path.relative_to(repo_dir.parent)),
+                        "text": chunk
+                    }
 
                     # Write the chunk for Vertex AI (content-only)
                     fout_jsonl.write(json.dumps({"content": chunk}) + "\n")
 
-                    # Record the identifier on the matching line in the manifest
-                    fout_keys.write(key + "\n")
+                    # Record the identifier, file path, and text in the manifest as JSON
+                    fout_keys.write(json.dumps(key_data) + "\n")
     line_count = sum(1 for _ in open(code_jsonl, "r", encoding="utf-8"))
     if line_count == 0:
         print("No code chunks to embed; skipping code batch job.")

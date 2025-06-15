@@ -70,16 +70,26 @@ func NewGeminiEmbedder() (*GeminiEmbedder, error) {
 }
 
 func embedBatch(ctx context.Context, client *aiplatform.PredictionClient, modelName string, texts []string) ([][]float32, error) {
-	instances := make([]*structpb.Value, len(texts))
-	for i, text := range texts {
+	instances := make([]*structpb.Value, 0, len(texts))
+	for _, text := range texts {
+		if len(text) < 20 {
+			continue
+		}
+		if len(text) > 2000 {
+			text = text[:2000]
+		}
 		instance, err := structpb.NewStruct(map[string]interface{}{
 			"content":   text,
-			"task_type": "RETRIEVAL_QUERY",
+			"task_type": "RETRIEVAL_DOCUMENT",
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to create instance: %w", err)
 		}
-		instances[i] = structpb.NewStructValue(instance)
+		instances = append(instances, structpb.NewStructValue(instance))
+	}
+
+	if len(instances) == 0 {
+		return nil, fmt.Errorf("no valid texts to embed")
 	}
 
 	req := &aiplatformpb.PredictRequest{
@@ -115,13 +125,43 @@ func embedBatch(ctx context.Context, client *aiplatform.PredictionClient, modelN
 // EmbedBatch generates embedding vectors for multiple input texts using VertexEmbedder
 func (v *VertexEmbedder) EmbedBatch(texts []string) ([][]float32, error) {
 	ctx := context.Background()
-	return embedBatch(ctx, v.client, v.modelName, texts)
+	const maxBatch = 5
+	var allEmbeddings [][]float32
+
+	for i := 0; i < len(texts); i += maxBatch {
+		end := i + maxBatch
+		if end > len(texts) {
+			end = len(texts)
+		}
+		chunk := texts[i:end]
+		embeddings, err := embedBatch(ctx, v.client, v.modelName, chunk)
+		if err != nil {
+			return nil, err
+		}
+		allEmbeddings = append(allEmbeddings, embeddings...)
+	}
+	return allEmbeddings, nil
 }
 
 // EmbedBatch generates embedding vectors for multiple input texts using GeminiEmbedder
 func (g *GeminiEmbedder) EmbedBatch(texts []string) ([][]float32, error) {
 	ctx := context.Background()
-	return embedBatch(ctx, g.client, g.modelName, texts)
+	const maxBatch = 5
+	var allEmbeddings [][]float32
+
+	for i := 0; i < len(texts); i += maxBatch {
+		end := i + maxBatch
+		if end > len(texts) {
+			end = len(texts)
+		}
+		chunk := texts[i:end]
+		embeddings, err := embedBatch(ctx, g.client, g.modelName, chunk)
+		if err != nil {
+			return nil, err
+		}
+		allEmbeddings = append(allEmbeddings, embeddings...)
+	}
+	return allEmbeddings, nil
 }
 
 // Embed generates an embedding vector for a single input text using VertexEmbedder

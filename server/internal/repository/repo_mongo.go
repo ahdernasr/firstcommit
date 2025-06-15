@@ -128,10 +128,8 @@ func (r *RepoMongo) CodeVectorSearch(ctx context.Context, repoID string, queryVe
 				"numCandidates": k * 10,
 				"limit":         k,
 				"similarity":    "cosine",
+				"filter":        bson.M{"repo_id": repoID},
 			}},
-		},
-		{
-			{"$match", bson.M{"repo_id": repoID}},
 		},
 		{
 			{"$project", bson.M{
