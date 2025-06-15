@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
-import { Search, Star, GitFork, Eye, Filter, ArrowDownUp } from "lucide-react" // Added ArrowDownUp icon
+import { Search, Star, GitFork, Eye, Filter, ArrowDownUp, AlertCircle } from "lucide-react" // Added AlertCircle icon
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -11,22 +11,37 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import Link from "next/link"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 
 interface Repository {
-  id: number
+  _id: string // MongoDB _id
   name: string
   full_name: string
-  description: string
-  stargazers_count: number
-  forks_count: number
+  owner: string
+  html_url: string // Now consistently available
+  description?: string // Make optional as it might be null
+  language?: string // Renamed from languages for simplicity on card display, will pick first from array
+  stargazers_count: number // Updated to match backend field name
   watchers_count: number
-  language: string
-  topics: string[]
-  owner: {
-    login: string
-    avatar_url: string
-  }
-  updated_at: string
+  forks_count: number
+  open_issues_count: number
+  license?: string
+  homepage?: string
+  image_url: string // Directly from backend's Repo model
+  default_branch?: string
+  created_at: string
+  pushed_at: string
+  size: number
+  visibility: string
+  archived: boolean
+  allow_forking: boolean
+  is_template: boolean
+  topics?: string[] // Make optional
+  languages: string[] // Keep original languages array from backend
+  readme?: string // Add Readme field back to the interface
+  score: number
+  relevance_reason?: string
 }
 
 export default function HomePage() {
@@ -37,122 +52,42 @@ export default function HomePage() {
   const [language, setLanguage] = useState("all") // Corresponds to selectedLanguage
   const [selectedTopic, setSelectedTopic] = useState("all") // New state for topic filter
 
-  const [showExamples, setShowExamples] = useState(true)
-
-  const exampleRepositories: Repository[] = [
-    {
-      id: 1,
-      name: "react",
-      full_name: "facebook/react",
-      description: "The library for web and native user interfaces.",
-      stargazers_count: 228000,
-      forks_count: 46800,
-      watchers_count: 228000,
-      language: "JavaScript",
-      topics: ["react", "javascript", "library", "ui", "frontend"],
-      owner: {
-        login: "facebook",
-        avatar_url: "https://avatars.githubusercontent.com/u/69631?v=4",
-      },
-      updated_at: "2024-12-01T10:30:00Z",
-    },
-    {
-      id: 2,
-      name: "next.js",
-      full_name: "vercel/next.js",
-      description: "The React Framework for the Web",
-      stargazers_count: 125000,
-      forks_count: 26800,
-      watchers_count: 125000,
-      language: "TypeScript",
-      topics: ["react", "nextjs", "framework", "typescript", "vercel"],
-      owner: {
-        login: "vercel",
-        avatar_url: "https://avatars.githubusercontent.com/u/14985020?v=4",
-      },
-      updated_at: "2024-12-01T09:15:00Z",
-    },
-    {
-      id: 3,
-      name: "vue",
-      full_name: "vuejs/vue",
-      description: "Vue.js is a progressive, incrementally-adoptable JavaScript framework for building UI on the web.",
-      stargazers_count: 207000,
-      forks_count: 33700,
-      watchers_count: 207000,
-      language: "TypeScript",
-      topics: ["vue", "javascript", "framework", "frontend", "spa"],
-      owner: {
-        login: "vuejs",
-        avatar_url: "https://avatars.githubusercontent.com/u/6128107?v=4",
-      },
-      updated_at: "2024-11-30T14:20:00Z",
-    },
-    {
-      id: 4,
-      name: "tensorflow",
-      full_name: "tensorflow/tensorflow",
-      description: "An Open Source Machine Learning Framework for Everyone",
-      stargazers_count: 185000,
-      forks_count: 74200,
-      watchers_count: 185000,
-      language: "C++",
-      topics: ["tensorflow", "machine-learning", "deep-learning", "neural-network", "ai"],
-      owner: {
-        login: "tensorflow",
-        avatar_url: "https://avatars.githubusercontent.com/u/15658638?v=4",
-      },
-      updated_at: "2024-12-01T08:45:00Z",
-    },
-    {
-      id: 5,
-      name: "vscode",
-      full_name: "microsoft/vscode",
-      description: "Visual Studio Code",
-      stargazers_count: 163000,
-      forks_count: 28900,
-      watchers_count: 163000,
-      language: "TypeScript",
-      topics: ["vscode", "editor", "typescript", "electron", "ide"],
-      owner: {
-        login: "microsoft",
-        avatar_url: "https://avatars.githubusercontent.com/u/6154722?v=4",
-      },
-      updated_at: "2024-12-01T11:10:00Z",
-    },
-    {
-      id: 6,
-      name: "node",
-      full_name: "nodejs/node",
-      description: "Node.js JavaScript runtime",
-      stargazers_count: 107000,
-      forks_count: 29200,
-      watchers_count: 107000,
-      language: "JavaScript",
-      topics: ["nodejs", "javascript", "runtime", "server", "backend"],
-      owner: {
-        login: "nodejs",
-        avatar_url: "https://avatars.githubusercontent.com/u/9950313?v=4",
-      },
-      updated_at: "2024-12-01T07:30:00Z",
-    },
-  ]
+  const [showExamples, setShowExamples] = useState(false) // Changed to false to prevent showing example repos initially
 
   const searchRepositories = async () => {
     setShowExamples(false)
-    if (!searchQuery.trim()) return
-
     setLoading(true)
     try {
-      const languageFilter = language !== "all" ? `+language:${language}` : ""
-      const topicFilter = selectedTopic !== "all" ? `+topic:${selectedTopic}` : "" // New topic filter
-      const response = await fetch(
-        `https://api.github.com/search/repositories?q=${encodeURIComponent(searchQuery)}${languageFilter}${topicFilter}&sort=${sortBy}&order=desc&per_page=20`,
-      )
+      const response = await fetch(`http://localhost:8080/api/v1/search?q=${encodeURIComponent(searchQuery)}`)
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
       const data = await response.json()
-      setRepositories(data.items || [])
+      console.log("Search Repositories Data:", data)
+      setRepositories(data || [])
     } catch (error) {
       console.error("Error searching repositories:", error)
+      setRepositories([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fetchInitialRepositories = async () => {
+    setLoading(true)
+    try {
+      // Fetch some initial data (e.g., top 100 repositories based on stars)
+      // This can be adjusted based on how you want to populate the homepage initially
+      const response = await fetch(`http://localhost:8080/api/v1/search?q=stars:>100`)
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      const data = await response.json()
+      console.log("Initial Repositories Data:", data)
+      setRepositories(data || [])
+    } catch (error) {
+      console.error("Error fetching initial repositories:", error)
+      setRepositories([])
     } finally {
       setLoading(false)
     }
@@ -170,6 +105,9 @@ export default function HomePage() {
         searchRepositories()
       }, 500)
       return () => clearTimeout(debounceTimer)
+    } else {
+      // Fetch initial repositories if no search query is active
+      fetchInitialRepositories()
     }
   }, [sortBy, language, selectedTopic, searchQuery])
 
@@ -362,53 +300,59 @@ export default function HomePage() {
           ) : showExamples ? (
             <div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {exampleRepositories.map((repo) => (
+                {/* Example repositories will be fetched from the backend */}
+              </div>
+            </div>
+          ) : repositories.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {repositories.map((repo, index) => (
+                <div key={repo._id || `${repo.full_name}-${index}`}>
                   <Link
-                    key={repo.id}
-                    href={`/repo/${repo.owner.login}/${repo.name}`}
+                    href={`/repo/${repo.full_name}`}
                     className="block transition-all duration-300 hover:scale-105"
                   >
                     <Card className="h-full bg-[#292f36] border-[#515b65] rounded-lg shadow-md hover:shadow-lg hover:bg-[#292f36]/90 transition-all duration-300">
                       <CardHeader className="p-6">
                         <div className="flex items-center gap-3 mb-3">
                           <img
-                            src={repo.owner.avatar_url || "/placeholder.svg"}
-                            alt={repo.owner.login}
+                            src={repo.image_url || "/placeholder.svg"}
+                            alt={repo.owner}
                             className="w-8 h-8 rounded-full"
                           />
-                          <span className="text-sm text-[#f3f3f3]/70 font-medium">{repo.owner.login}</span>
+                          <span className="text-sm text-[#f3f3f3]/70 font-medium">{repo.owner}</span>
                         </div>
                         <CardTitle className="text-xl text-[#f3f3f3] font-semibold">{repo.name}</CardTitle>
                         <CardDescription className="line-clamp-2 text-[#f3f3f3]/60 leading-relaxed">
                           {repo.description || "No description available"}
                         </CardDescription>
                       </CardHeader>
-                      <CardContent className="p-6">
-                        <div className="flex items-center gap-6 text-sm text-[#f3f3f3]/70 mb-4">
-                          <div className="flex items-center gap-2">
+                      <CardContent className="p-6 pt-0 space-y-4">
+                        <div className="flex flex-wrap gap-4 items-center">
+                          <div className="flex items-center gap-2 text-[#f3f3f3]/80">
                             <Star className="h-4 w-4 text-[#f1e05a]" />
-                            <span className="font-medium">{repo.stargazers_count.toLocaleString()}</span>
+                            <span className="font-medium">{repo.stargazers_count.toLocaleString()} stars</span>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 text-[#f3f3f3]/80">
                             <GitFork className="h-4 w-4" />
-                            <span className="font-medium">{repo.forks_count.toLocaleString()}</span>
+                            <span className="font-medium">{repo.forks_count.toLocaleString()} forks</span>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 text-[#f3f3f3]/80">
                             <Eye className="h-4 w-4" />
-                            <span className="font-medium">{repo.watchers_count.toLocaleString()}</span>
+                            <span className="font-medium">{repo.watchers_count.toLocaleString()} watching</span>
                           </div>
-                        </div>
-
-                        <div className="flex flex-wrap gap-2 mb-4">
+                          <div className="flex items-center gap-2 text-[#f3f3f3]/80">
+                            <AlertCircle className="h-4 w-4" />
+                            <span className="font-medium">{repo.open_issues_count} open issues</span>
+                          </div>
                           {repo.language && (
                             <Badge
                               variant="outline"
-                              className="border-[#f3c9a4] text-[#f3c9a4] px-3 py-1 rounded-md font-medium hover:bg-[#f3c9a4]/10 transition-colors duration-200"
+                              className="px-3 py-1 rounded-md font-medium bg-[#515b65]/20 border-[#515b65] text-[#f3f3f3]"
                             >
                               {repo.language}
                             </Badge>
                           )}
-                          {repo.topics.slice(0, 2).map((topic) => (
+                          {repo.topics && repo.topics.slice(0, 2).map((topic) => (
                             <Badge
                               key={topic}
                               variant="outline"
@@ -418,81 +362,13 @@ export default function HomePage() {
                             </Badge>
                           ))}
                         </div>
-
                         <p className="text-xs text-[#f3f3f3]/50 font-medium">
-                          Updated 01/01/2025
+                          Updated {new Date(repo.pushed_at).toLocaleDateString()}
                         </p>
                       </CardContent>
                     </Card>
                   </Link>
-                ))}
-              </div>
-            </div>
-          ) : repositories.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {repositories.map((repo) => (
-                <Link
-                  key={repo.id}
-                  href={`/repo/${repo.owner.login}/${repo.name}`}
-                  className="block transition-all duration-300 hover:scale-105"
-                >
-                  <Card className="h-full bg-[#292f36] border-[#515b65] rounded-lg shadow-md hover:shadow-lg hover:bg-[#292f36]/90 transition-all duration-300">
-                    <CardHeader className="p-6">
-                      <div className="flex items-center gap-3 mb-3">
-                        <img
-                          src={repo.owner.avatar_url || "/placeholder.svg"}
-                          alt={repo.owner.login}
-                          className="w-8 h-8 rounded-full"
-                        />
-                        <span className="text-sm text-[#f3f3f3]/70 font-medium">{repo.owner.login}</span>
-                      </div>
-                      <CardTitle className="text-xl text-[#f3f3f3] font-semibold">{repo.name}</CardTitle>
-                      <CardDescription className="line-clamp-2 text-[#f3f3f3]/60 leading-relaxed">
-                        {repo.description || "No description available"}
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="p-6">
-                      <div className="flex items-center gap-6 text-sm text-[#f3f3f3]/70 mb-4">
-                        <div className="flex items-center gap-2">
-                          <Star className="h-4 w-4 text-[#f1e05a]" />
-                          <span className="font-medium">{repo.stargazers_count.toLocaleString()}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <GitFork className="h-4 w-4" />
-                          <span className="font-medium">{repo.forks_count.toLocaleString()}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Eye className="h-4 w-4" />
-                          <span className="font-medium">{repo.watchers_count.toLocaleString()}</span>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2 mb-4">
-                        {repo.language && (
-                          <Badge
-                            variant="outline"
-                            className="border-[#f3c9a4] text-[#f3c9a4] px-3 py-1 rounded-md font-medium hover:bg-[#f3c9a4]/10 transition-colors duration-200"
-                          >
-                            {repo.language}
-                          </Badge>
-                        )}
-                        {repo.topics.slice(0, 2).map((topic) => (
-                          <Badge
-                            key={topic}
-                            variant="outline"
-                            className="border-[#515b65] text-[#f3f3f3]/70 px-3 py-1 rounded-md hover:border-[#f3c9a4]/50 hover:text-[#f3c9a4] transition-colors duration-200"
-                          >
-                            {topic}
-                          </Badge>
-                        ))}
-                      </div>
-
-                      <p className="text-xs text-[#f3f3f3]/50 font-medium">
-                        Updated {new Date(repo.updated_at).toLocaleDateString()}
-                      </p>
-                    </CardContent>
-                  </Card>
-                </Link>
+                </div>
               ))}
             </div>
           ) : searchQuery && !loading ? (

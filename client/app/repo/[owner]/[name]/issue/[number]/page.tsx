@@ -15,7 +15,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import Link from "next/link"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
+import SyntaxHighlighter from "react-syntax-highlighter/dist/esm/prism"
 import { tomorrow } from "react-syntax-highlighter/dist/esm/styles/prism"
 import { ArrowUp } from "lucide-react"
 
@@ -23,7 +23,7 @@ interface Issue {
   id: number
   number: number
   title: string
-  body: string
+  body?: string
   state: string
   user: {
     login: string
@@ -84,8 +84,11 @@ export default function IssuePage() {
     const fetchIssue = async () => {
       try {
         const response = await fetch(
-          `https://api.github.com/repos/${params.owner}/${params.name}/issues/${params.number}`,
+          `http://localhost:8080/api/v1/repos/${params.owner}/${params.name}/issues/${params.number}`,
         )
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
         const data = await response.json()
         setIssue(data)
         setMessages([]) // reset conversation on new issue
@@ -156,7 +159,7 @@ export default function IssuePage() {
   }, [])
 
   // Handle form submit: send user message, then send a static placeholder assistant response
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!input.trim() || isGenerating) return
 
@@ -172,74 +175,52 @@ export default function IssuePage() {
     // Re-enable auto-scroll when user sends a message
     setShouldAutoScroll(true)
 
-    // 2) Simulate AI "thinking"
+    // 2) Simulate AI "thinking" / Send message to backend
     setIsGenerating(true)
-    setTimeout(() => {
-      // 3) After a brief delay, add the assistant message with its full (static) content:
-      //    === OLD PLACEHOLDER TEXT START ===
-      const placeholderText = `# Understanding GitHub Issues 🚀
+    try {
+      const response = await fetch(`http://localhost:8080/api/v1/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          repoID: `${params.owner}/${params.name}`,
+          issueNumber: parseInt(params.number as string),
+          message: input.trim(),
+          // TODO: Pass conversation history if implementing multi-turn chat
+        }),
+      })
 
-Thank you for your question! I'm here to help you navigate this issue effectively.
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
 
-## What I Can Help With
-
-- **Bug Analysis**: Identify root causes and reproduction steps
-- **Code Solutions**: Provide working code examples and fixes  
-- **Best Practices**: Share industry-standard approaches
-- **Documentation**: Explain complex technical concepts
-
-## Code Example
-
-Here's a sample JavaScript function that demonstrates proper error handling:
-
-\`\`\`javascript
-async function fetchIssueData(owner, repo, issueNumber) {
-  try {
-    const response = await fetch(\`https://api.github.com/repos/\${owner}/\${repo}/issues/\${issueNumber}\`);
-    
-    if (!response.ok) {
-      throw new Error(\`HTTP error! status: \${response.status}\`);
-    }
-    
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('Failed to fetch issue:', error);
-    throw error;
-  }
-}
-\`\`\`
-
-## Quick Tips 💡
-
-> **Pro Tip**: Always check the issue labels and comments for additional context before implementing a solution.
-
-### Common Issue Types:
-1. **Bug Reports** - Focus on reproduction steps
-2. **Feature Requests** - Consider implementation complexity  
-3. **Documentation** - Ensure clarity and completeness
-
----
-
-**Ready to dive deeper?** Ask me anything about this specific issue and I'll provide detailed, actionable guidance!`
-      //    === OLD PLACEHOLDER TEXT END ===
+      const data = await response.json()
 
       const assistantMessageId = (Date.now() + 1).toString()
       const assistantMessage: Message = {
         id: assistantMessageId,
         role: "assistant",
-        content: placeholderText,
+        content: data.response || "No response from AI.", // Assuming backend returns a 'response' field
       }
       setMessages((prev) => [...prev, assistantMessage])
 
-      // 4) Seed displayedContent so the typing-effect useEffect can start
       setDisplayedContent((prev) => ({
         ...prev,
         [assistantMessageId]: "",
       }))
 
+    } catch (error) {
+      console.error("Error sending chat message:", error)
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: "Error communicating with AI. Please try again.",
+      }
+      setMessages((prev) => [...prev, errorMessage])
+    } finally {
       setIsGenerating(false)
-    }, 300) // short delay before AI “responds”
+    }
   }
 
   if (loading) {
@@ -291,7 +272,7 @@ async function fetchIssueData(owner, repo, issueNumber) {
                     <img
                       src={issue.user.avatar_url || "/placeholder.svg"}
                       alt={issue.user.login}
-                      className="w-6 h-6 rounded-full"
+                      className="w-10 h-10 rounded-full shadow-md"
                     />
                     <span className="font-medium">by {issue.user.login}</span>
                   </div>
@@ -343,9 +324,16 @@ async function fetchIssueData(owner, repo, issueNumber) {
                                     <ReactMarkdown
                                       remarkPlugins={[remarkGfm]}
                                       components={{
-                                        code({ node, inline, className, children, ...props }) {
+                                        code({ inline, className, children, ...props }: any) {
                                           const match = /language-(\w+)/.exec(className || "")
-                                          return !inline && match ? (
+                                          const isInline = inline && !match // Treat as inline if explicitly inline and not a code block
+
+                                          if (isInline) {
+                                            // Render inline code without SyntaxHighlighter
+                                            return <code className={className} {...props}>{children}</code>
+                                          }
+
+                                          return match ? (
                                             <SyntaxHighlighter
                                               style={tomorrow}
                                               language={match[1]}
@@ -355,10 +343,7 @@ async function fetchIssueData(owner, repo, issueNumber) {
                                               {String(children).replace(/\n$/, "")}
                                             </SyntaxHighlighter>
                                           ) : (
-                                            <code
-                                              className="bg-[#16191d] px-2 py-1 rounded text-sm border border-[#515b65]"
-                                              {...props}
-                                            >
+                                            <code className={className} {...props}>
                                               {children}
                                             </code>
                                           )
@@ -417,17 +402,26 @@ async function fetchIssueData(owner, repo, issueNumber) {
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
-                    code({ node, inline, className, children, ...props }) {
+                    code({ inline, className, children, ...props }: any) {
                       const match = /language-(\w+)/.exec(className || "")
-                      return !inline && match ? (
-                        <SyntaxHighlighter style={tomorrow} language={match[1]} PreTag="div" {...props}>
+                      const isInline = inline && !match // Treat as inline if explicitly inline and not a code block
+
+                      if (isInline) {
+                        // Render inline code without SyntaxHighlighter
+                        return <code className={className} {...props}>{children}</code>
+                      }
+
+                      return match ? (
+                        <SyntaxHighlighter
+                          style={tomorrow}
+                          language={match[1]}
+                          PreTag="div"
+                          {...props}
+                        >
                           {String(children).replace(/\n$/, "")}
                         </SyntaxHighlighter>
                       ) : (
-                        <code
-                          className="bg-[#16191d] px-2 py-1 rounded text-sm border border-[#515b65] text-[#f3c9a4]"
-                          {...props}
-                        >
+                        <code className={className} {...props}>
                           {children}
                         </code>
                       )
@@ -588,17 +582,26 @@ I can help you understand this issue and provide guidance. Here are some example
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
                           components={{
-                            code({ node, inline, className, children, ...props }) {
+                            code({ inline, className, children, ...props }: any) {
                               const match = /language-(\w+)/.exec(className || "")
-                              return !inline && match ? (
-                                <SyntaxHighlighter style={tomorrow} language={match[1]} PreTag="div" {...props}>
+                              const isInline = inline && !match // Treat as inline if explicitly inline and not a code block
+
+                              if (isInline) {
+                                // Render inline code without SyntaxHighlighter
+                                return <code className={className} {...props}>{children}</code>
+                              }
+
+                              return match ? (
+                                <SyntaxHighlighter
+                                  style={tomorrow}
+                                  language={match[1]}
+                                  PreTag="div"
+                                  {...props}
+                                >
                                   {String(children).replace(/\n$/, "")}
                                 </SyntaxHighlighter>
                               ) : (
-                                <code
-                                  className="bg-[#16191d] px-2 py-1 rounded text-sm border border-[#515b65]"
-                                  {...props}
-                                >
+                                <code className={className} {...props}>
                                   {children}
                                 </code>
                               )

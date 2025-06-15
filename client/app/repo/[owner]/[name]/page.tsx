@@ -13,33 +13,43 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm" // Corrected import path
 
 interface Repository {
-  id: number
+  _id: string // MongoDB _id
   name: string
   full_name: string
-  description: string
-  stargazers_count: number
-  forks_count: number
-  watchers_count: number
-  language: string
-  topics: string[]
   owner: {
     login: string
-    avatar_url: string
+    avatar_url: string // This will map to image_url from the backend
   }
   html_url: string
-  created_at: string
-  updated_at: string
+  description?: string // Make optional as it might be null
+  language?: string // Make optional
+  stargazers_count: number
+  watchers_count: number
+  forks_count: number
   open_issues_count: number
-  license?: {
-    name: string
-  }
+  license?: string // From spdx_id
+  homepage?: string
+  image_url: string // From owner.avatar_url
+  default_branch?: string
+  created_at: string
+  pushed_at: string
+  size: number
+  visibility: string
+  archived: boolean
+  allow_forking: boolean
+  is_template: boolean
+  topics: string[]
+  languages: string[]
+  readme?: string
+  score: number
+  relevance_reason?: string
 }
 
 interface Issue {
   id: number
   number: number
   title: string
-  body: string
+  body?: string // Make optional
   state: string
   user: {
     login: string
@@ -68,19 +78,36 @@ export default function RepoPage() {
   const fetchIssues = async (issueState: "open" | "closed", issueLabel: string, sortBy: string) => {
     setIssuesLoading(true)
     try {
-      let url = `https://api.github.com/repos/${params.owner}/${params.name}/issues?per_page=100`
-      url += `&state=${issueState}`
-      url += `&sort=${sortBy}`
-      url += `&direction=desc`
+      const response = await fetch(`http://localhost:8080/api/v1/repos/${params.owner}/${params.name}/issues`)
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
+      }
+      const data = await response.json()
+      let filteredIssues = data
+
+      // Client-side filtering for labels, as backend doesn't support it yet
       if (issueLabel !== "all") {
-        url += `&labels=${encodeURIComponent(issueLabel)}`
+        filteredIssues = filteredIssues.filter((issue: Issue) =>
+          issue.labels.some((label) => label.name.toLowerCase() === issueLabel.toLowerCase())
+        )
       }
 
-      const response = await fetch(url)
-      const data = await response.json()
-      setIssues(data)
+      // Client-side sorting for now
+      filteredIssues.sort((a: Issue, b: Issue) => {
+        if (sortBy === "comments") {
+          return b.comments - a.comments
+        } else if (sortBy === "updated") {
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        } else {
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        }
+      })
+      setIssues(filteredIssues)
     } catch (error) {
       console.error("Error fetching issues:", error)
+      setIssues([])
+      // You might want to show an error message to the user here
     } finally {
       setIssuesLoading(false)
     }
@@ -89,7 +116,11 @@ export default function RepoPage() {
   useEffect(() => {
     const fetchRepository = async () => {
       try {
-        const response = await fetch(`https://api.github.com/repos/${params.owner}/${params.name}`)
+        const repoId = `${params.owner}/${params.name}` // Construct the full_name as the ID
+        const response = await fetch(`http://localhost:8080/api/v1/repos/${encodeURIComponent(repoId)}`)
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
         const data = await response.json()
         setRepository(data)
       } catch (error) {
@@ -150,7 +181,7 @@ export default function RepoPage() {
         <div className="mb-12">
           <div className="flex items-center gap-4 mb-6">
             <img
-              src={repository.owner.avatar_url || "/placeholder.svg"}
+              src={repository.image_url || "/placeholder.svg"}
               alt={repository.owner.login}
               className="w-16 h-16 rounded-full shadow-md"
             />
@@ -179,7 +210,7 @@ export default function RepoPage() {
             </div>
             <div className="flex items-center gap-2 text-[#f3f3f3]/80">
               <Calendar className="h-5 w-5" />
-              <span className="font-medium">Updated {new Date(repository.updated_at).toLocaleDateString()}</span>
+              <span className="font-medium">Updated {new Date(repository.pushed_at).toLocaleDateString()}</span>
             </div>
           </div>
 
@@ -191,7 +222,7 @@ export default function RepoPage() {
             )}
             {repository.license && (
               <Badge variant="outline" className="border-[#515b65] text-[#f3f3f3]/70 px-4 py-2 rounded-lg">
-                {repository.license.name}
+                {repository.license}
               </Badge>
             )}
             {repository.topics.map((topic) => (
@@ -462,7 +493,7 @@ export default function RepoPage() {
                                     </h3>
                                     <Link href={`/repo/${params.owner}/${params.name}/issue/${issue.number}`}>
                                       <Button className="bg-gradient-to-r from-[#f3c9a4] to-[#3ac8bd] bg-size-200 animate-gradient-x text-[#16191d] px-4 py-2 rounded-lg font-medium shadow-md hover:shadow-lg transition-all duration-200">
-                                        <Sparkles className="h-4 w-4" />
+                                        <Sparkles className="h-4 w-4 mr-2" />
                                         Guide Me
                                       </Button>
                                     </Link>
