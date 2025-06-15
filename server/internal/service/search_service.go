@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"fmt"
+	"log"
 
 	"ai-in-action/internal/models"
 )
@@ -18,35 +20,55 @@ type SearchRepoRepository interface {
 
 // ---- Service interface + implementation ------------------------------------
 
-// SearchService converts a natural‑language query into an embedding and then
-// performs K‑NN search through the repository vector index.
+// SearchService converts natural‑language queries into embeddings and performs
+// K‑NN searches through the repository vector index.
 type SearchService interface {
-	Search(ctx context.Context, query string, k int) ([]models.Repo, error)
+	Search(query string) ([]models.Repo, error)
 }
 
 type searchService struct {
-	repoRepo SearchRepoRepository
+	repo     SearchRepoRepository
 	embedder EmbeddingClient
 }
 
-// NewSearchService wires dependencies and returns SearchService.
-func NewSearchService(repoRepo SearchRepoRepository, embedder EmbeddingClient) SearchService {
+// NewSearchService wires the repository and embedder.
+func NewSearchService(repo SearchRepoRepository, embedder EmbeddingClient) SearchService {
 	return &searchService{
-		repoRepo: repoRepo,
+		repo:     repo,
 		embedder: embedder,
 	}
 }
 
-// Search embeds the query string, performs a vector search, and returns results.
-func (s *searchService) Search(ctx context.Context, query string, k int) ([]models.Repo, error) {
+// Search embeds the query string and calls the repository's VectorSearch method.
+func (s *searchService) Search(query string) ([]models.Repo, error) {
+	ctx := context.Background()
+	log.Printf("Starting search for query: %q", query)
+
+	// Generate embedding
+	log.Printf("Generating embedding for query...")
 	vec, err := s.embedder.Embed(query)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to generate embedding: %w", err)
+	}
+	log.Printf("Generated embedding vector of length %d", len(vec))
+	log.Printf("First few values of embedding: %v", vec[:5])
+
+	// Search repositories
+	log.Printf("Performing vector search with k=10...")
+	repos, err := s.repo.VectorSearch(ctx, vec, 10)
+	if err != nil {
+		return nil, fmt.Errorf("vector search failed: %w", err)
+	}
+	log.Printf("Vector search returned %d results", len(repos))
+
+	if len(repos) == 0 {
+		log.Printf("No repositories found for query: %q", query)
+		return []models.Repo{}, nil
 	}
 
-	repos, err := s.repoRepo.VectorSearch(ctx, vec, k)
-	if err != nil {
-		return nil, err
+	// Log results for debugging
+	for i, repo := range repos {
+		log.Printf("Result #%d: %s (score: %.4f)", i+1, repo.ID, repo.Score)
 	}
 
 	return repos, nil

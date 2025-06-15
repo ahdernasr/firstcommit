@@ -20,8 +20,8 @@ type GuideRepository interface {
 
 // RepoRepository lets us pull README / code snippets vectors for RAG.
 type RepoRepository interface {
-	FindByID(ctx context.Context, repoID string) (models.Repo, error)
-	GetTopContextChunks(ctx context.Context, repoID string, queryVec []float32, k int) ([]string, error)
+	FindByID(ctx context.Context, repoID string) (*models.Repo, error)
+	GetTopContextChunks(ctx context.Context, repoID string, k int) ([]models.CodeChunk, error)
 }
 
 // ---- Service implementation ------------------------------------------------
@@ -71,30 +71,29 @@ func (s *guideService) GetGuide(ctx context.Context, issueID string) (models.Gui
 		return models.Guide{}, err
 	}
 
-	// 3. Embed the issue title/body.
-	query := issue.Title + "\n\n" + issue.Body
-	qVec, err := s.embedder.Embed(query)
-	if err != nil {
-		return models.Guide{}, err
-	}
-
-	// 4. Retrieve top‑k context chunks (code, README) from Mongo vector index.
+	// 3. Retrieve top‑k context chunks (code, README) from Mongo vector index.
 	repoDoc, err := s.repoRepo.FindByID(ctx, repo)
 	if err != nil {
 		return models.Guide{}, err
 	}
-	chunks, err := s.repoRepo.GetTopContextChunks(ctx, repoDoc.ID.Hex(), qVec, 20)
+	chunks, err := s.repoRepo.GetTopContextChunks(ctx, repoDoc.ID, 20)
 	if err != nil {
 		return models.Guide{}, err
 	}
 
-	// 5. Run local LLM with RAG prompt.
-	answer, err := s.llm.GenerateGuide(issue, chunks)
+	// Convert CodeChunks to strings for the LLM
+	chunkTexts := make([]string, len(chunks))
+	for i, chunk := range chunks {
+		chunkTexts[i] = chunk.Text
+	}
+
+	// 4. Run local LLM with RAG prompt.
+	answer, err := s.llm.GenerateGuide(issue, chunkTexts)
 	if err != nil {
 		return models.Guide{}, err
 	}
 
-	// 6. Persist guide.
+	// 5. Persist guide.
 	guide = models.Guide{
 		ID:        issueID,
 		Answer:    answer,
@@ -123,7 +122,7 @@ type EmbeddingClient interface {
 	Embed(text string) ([]float32, error)
 }
 
-// LLMClient abstracts the local LLM you’ll plug in.
+// LLMClient abstracts the local LLM you'll plug in.
 type LLMClient interface {
 	GenerateGuide(issue models.Issue, context []string) (string, error)
 }

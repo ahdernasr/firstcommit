@@ -1,23 +1,29 @@
 package models
 
-import "go.mongodb.org/mongo-driver/bson/primitive"
-
-// Repo represents a repository document stored in MongoDB.
-// It also carries a few GitHub‑specific fields so handlers can echo them
-// without an extra DTO layer.
+// Repo represents a GitHub repository with its metadata and vector embedding.
 type Repo struct {
-	ID          primitive.ObjectID `bson:"_id,omitempty" json:"id"`
-	Owner       string             `bson:"owner"          json:"owner"`     // e.g. "torvalds"
-	Name        string             `bson:"name"           json:"name"`      // e.g. "linux"
-	FullName    string             `bson:"full_name"      json:"full_name"` // e.g. "torvalds/linux"
-	Description string             `bson:"description"    json:"description"`
-	Stars       int                `bson:"stars"          json:"stars"`
-	Languages   []string           `bson:"languages"      json:"languages"`
-	ImageURL    string             `bson:"image_url"      json:"image_url"` // cached owner avatar or repo header img
-	Vector      []float32          `bson:"vector,omitempty" json:"-"`       // embedding vector (not serialized to JSON)
+	ID          string    `bson:"_id" json:"id"`      // Repository full name (e.g. "facebook/react")
+	Owner       string    `bson:"owner" json:"owner"` // GitHub username
+	Name        string    `bson:"name" json:"name"`   // Repository name
+	FullName    string    `bson:"full_name" json:"full_name"`
+	Description string    `bson:"description" json:"description"`
+	Stars       int       `bson:"stars" json:"stars"`
+	Languages   []string  `bson:"languages" json:"languages"`
+	ImageURL    string    `bson:"image_url" json:"image_url"`
+	Embedding   []float32 `bson:"embedding" json:"-"` // Vector embedding (excluded from JSON)
+	Score       float64   `bson:"score" json:"score"` // Vector search score
 }
 
-// Issue captures the minimal fields we care about from GitHub’s REST API.
+// CodeChunk represents a code snippet or documentation chunk from a repository.
+type CodeChunk struct {
+	ID     string  `bson:"_id" json:"id"`
+	RepoID string  `bson:"repo_id" json:"repo_id"`
+	Text   string  `bson:"text" json:"text"`
+	File   string  `bson:"file" json:"file"`
+	Score  float64 `bson:"score" json:"score"`
+}
+
+// Issue captures the minimal fields we care about from GitHub's REST API.
 type Issue struct {
 	ID        int    `json:"id"         bson:"id"`
 	Number    int    `json:"number"     bson:"number"`

@@ -1,51 +1,41 @@
 package handler
 
 import (
-	"strconv"
-
 	"github.com/gofiber/fiber/v2"
 
-	"ai-in-action/internal/models"
 	"ai-in-action/internal/service"
 )
 
-// SearchHandler wires HTTP → SearchService.
+// SearchHandler exposes the search API.
 type SearchHandler struct {
 	svc service.SearchService
 }
 
-// NewSearchHandler returns a handler instance.
+// NewSearchHandler wires the service.
 func NewSearchHandler(svc service.SearchService) *SearchHandler {
 	return &SearchHandler{svc: svc}
 }
 
-// Register mounts GET /search on the given router group.
+// Register mounts the search routes.
 func (h *SearchHandler) Register(r fiber.Router) {
 	r.Get("/search", h.search)
 }
 
-// search handles GET /search?q=some+text&k=10
+// search handles GET /api/v1/search?q=query
 func (h *SearchHandler) search(c *fiber.Ctx) error {
-	q := c.Query("q")
-	if q == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "q (query) parameter is required")
+	query := c.Query("q")
+	if query == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "missing query parameter 'q'",
+		})
 	}
 
-	kParam := c.Query("k", "10")
-	k, err := strconv.Atoi(kParam)
-	if err != nil || k <= 0 {
-		return fiber.NewError(fiber.StatusBadRequest, "k must be a positive integer")
-	}
-
-	req := models.SearchRequest{
-		Query: q,
-		TopK:  k,
-	}
-
-	results, err := h.svc.Search(c.UserContext(), req.Query, req.TopK)
+	repos, err := h.svc.Search(query)
 	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		return c.Status(500).JSON(fiber.Map{
+			"error": err.Error(),
+		})
 	}
 
-	return c.JSON(results)
+	return c.JSON(repos)
 }

@@ -6,6 +6,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from google.cloud import storage
 import google.cloud.aiplatform as aiplatform
+from vertexai.language_models import TextEmbeddingModel
 from pymongo import MongoClient
 from pymongo import ReplaceOne, WriteConcern
 import certifi
@@ -48,6 +49,10 @@ BINARY_EXTS = {
 }
 # Safety slice for minified / long‑token chunks
 MAX_CHUNK_BYTES = 32 * 1024  # 32 KiB
+# Gemini online embedding quotas are limited to ~64 k tokens/min.
+# Keep each metadata string small and pace requests.
+MAX_METADATA_BYTES = 32 * 1024      # 32 KiB per repo
+EMBED_SLEEP = 12                    # seconds to wait between requests
 METADATA_MODEL_NAME = f"projects/{PROJECT_ID}/locations/{LOCATION}/publishers/google/models/gemini-embedding-001"
 CODE_MODEL_NAME = f"projects/{PROJECT_ID}/locations/{LOCATION}/publishers/google/models/text-embedding-005"
 
@@ -260,75 +265,68 @@ def main():
     db["repos_meta"].delete_many({})
     print("[DEBUG] Cleared repos_code and repos_meta collections")
 
+    # Use online Gemini embeddings for metadata (small test set)
+    embedding_model = TextEmbeddingModel.from_pretrained("gemini-embedding-001")
+
+    # ────────────────────────────────────────────────────────────────
+    # Metadata embeddings – inline Gemini calls (no batch job)
+    # ────────────────────────────────────────────────────────────────
     meta_start = time.perf_counter()
-    # 1. Metadata embeddings from federated collection
-    metadata_jsonl = "/tmp/repos_meta.jsonl"
-    meta_key_manifest = "/tmp/repos_meta.keys"
 
-    with open(metadata_jsonl, "w", encoding="utf-8") as fout_jsonl, \
-         open(meta_key_manifest, "w", encoding="utf-8") as fout_keys:
+    docs_to_insert = []
 
-        # Helper to yield individual repo objects, regardless of wrapping shape
-        def yield_repo_objects(cursor):
-            """
-            Handles cases where `repos_meta` is:
-            1. One document per repo   (each is a dict)
-            2. One *wrapper* document whose values are arrays of repos
-            """
-            for doc in cursor:
-                # Case 1: document looks like a repo (has name/description)
-                if isinstance(doc, dict) and ("name" in doc or "description" in doc):
-                    yield doc
-                    continue
-
-                # Case 2: doc is a wrapper; walk its values looking for arrays of repos
-                if isinstance(doc, dict):
-                    for val in doc.values():
-                        if isinstance(val, list):
-                            for maybe_repo in val:
-                                if isinstance(maybe_repo, dict):
-                                    yield maybe_repo
-                # Skip anything else (e.g. primitive types)
-
-        # Iterate over every repo object and write to JSONL + manifest
-        for idx, obj in enumerate(yield_repo_objects(federated_meta_coll.find())):
-            # Only use name, description, and topics for embedding
-            text = stringify_repo(obj)
-            if not text.strip():
-                print(f"[WARN] Skipping empty metadata record: {obj}")
-                # Skip empty metadata records
+    def yield_repo_objects(cursor):
+        """Yield each repo dict regardless of wrapper shape."""
+        for doc in cursor:
+            if isinstance(doc, dict) and ("name" in doc or "description" in doc):
+                yield doc
                 continue
-            
-            fout_jsonl.write(json.dumps({"content": text, "task_type": "RETRIEVAL_DOCUMENT"}) + "\n")
-            # ⬇️ Deterministic key with row prefix so ingest alignment is guaranteed
-            base_id = (
-                obj.get("full_name")                      # e.g. owner/repo
-                or obj.get("name")                        # repo name
-                or (str(obj["_id"]) if obj.get("_id") is not None else None)
-                or os.urandom(8).hex()                    # guaranteed unique
-            )
-            key = f"{idx:08d}|{base_id}"
-            fout_keys.write(key + "\n")
+            if isinstance(doc, dict):
+                for val in doc.values():
+                    if isinstance(val, list):
+                        for maybe_repo in val:
+                            if isinstance(maybe_repo, dict):
+                                yield maybe_repo
 
-    # Only proceed if there is data
-    line_count = sum(1 for _ in open(metadata_jsonl, "r", encoding="utf-8"))
-    if line_count == 0:
-        print("No metadata items to embed; skipping metadata batch job.")
+    for obj in yield_repo_objects(federated_meta_coll.find()):
+        text = stringify_repo(obj)
+        if not text.strip():
+            continue
+
+        # Truncate very long strings to fit quota
+        if len(text.encode("utf-8")) > MAX_METADATA_BYTES:
+            text = text.encode("utf-8")[:MAX_METADATA_BYTES].decode("utf-8", errors="ignore")
+
+        # Online embedding call – one per repo, with retry/backoff
+        for attempt in range(3):
+            try:
+                emb = embedding_model.get_embeddings([text])[0].values
+                break
+            except Exception as exc:
+                if "RESOURCE_EXHAUSTED" in str(exc) and attempt < 2:
+                    wait = EMBED_SLEEP * (attempt + 1)
+                    print(f"[WARN] Quota hit, sleeping {wait}s then retrying...")
+                    time.sleep(wait)
+                    continue
+                raise
+        time.sleep(EMBED_SLEEP)   # steady pacing
+
+        _id = (
+            obj.get("full_name")
+            or obj.get("name")
+            or str(obj.get("_id") or os.urandom(8).hex())
+        )
+
+        docs_to_insert.append({"_id": _id, "embedding": emb})
+
+    if docs_to_insert:
+        db["repos_meta"].insert_many(docs_to_insert, ordered=False)
+        print(f"[INFO] Inserted {len(docs_to_insert)} metadata embeddings (Gemini).")
     else:
-        # ─── upload files ───────────────────────────────────────────
-        upload_jsonl_to_gcs(metadata_jsonl, "input/repos_meta.jsonl")
-        upload_jsonl_to_gcs(meta_key_manifest, "input/repos_meta.keys")
-        # ─── run batch job & ingest ────────────────────────────────
-        meta_output_dir = run_batch_job("input/repos_meta.jsonl",
-                                        "output/repos_meta",
-                                        "embed-metadata",
-                                        "metadata")
-        meta_keys = download_text_blob(GCS_BUCKET, "input/repos_meta.keys").splitlines()
-        ingest_predictions_to_mongo_fast(meta_output_dir,
-                                         "repos_meta",
-                                         iter(meta_keys))
-        meta_elapsed = time.perf_counter() - meta_start
-        print(f"[TIME] Metadata section took {meta_elapsed:.2f} s")
+        print("[WARN] No metadata docs to embed.")
+
+    meta_elapsed = time.perf_counter() - meta_start
+    print(f"[TIME] Metadata section took {meta_elapsed:.2f}s (Gemini inline)")
 
     code_start = time.perf_counter()
     # 2. Code embeddings

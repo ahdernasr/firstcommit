@@ -19,8 +19,9 @@ type Config struct {
 	Port string
 
 	// Data stores
-	MongoURI string
-	DBName   string
+	MongoURI          string
+	FederatedMongoURI string
+	DBName            string
 
 	// External services
 	GitHubToken string
@@ -37,12 +38,13 @@ func Load() Config {
 	_ = godotenv.Load()
 
 	return Config{
-		Port:         getEnv("PORT", "8080"),
-		MongoURI:     must("MONGODB_URI"),
-		DBName:       getEnv("MONGODB_DB", "ai_action"),
-		GitHubToken:  must("GITHUB_TOKEN"),
-		ReadTimeout:  getDuration("READ_TIMEOUT_SEC", 5),
-		WriteTimeout: getDuration("WRITE_TIMEOUT_SEC", 10),
+		Port:              getEnv("PORT", "8080"),
+		MongoURI:          must("MONGODB_URI"),
+		FederatedMongoURI: must("FEDERATED_MONGODB_URI"),
+		DBName:            getEnv("MONGODB_DB", "ai_action"),
+		GitHubToken:       must("GITHUB_TOKEN"),
+		ReadTimeout:       getDuration("READ_TIMEOUT_SEC", 5),
+		WriteTimeout:      getDuration("WRITE_TIMEOUT_SEC", 10),
 	}
 }
 

@@ -53,11 +53,11 @@ func (s *repoService) GetRepo(ctx context.Context, repoID string) (RepoSDetail, 
 	issues, err := s.gh.ListRepoIssues(owner, name, "open", 20)
 	if err != nil {
 		// Non-fatal: still return repo metadata even if GitHub call fails.
-		return RepoSDetail{Repo: repoDoc}, nil
+		return RepoSDetail{Repo: *repoDoc}, nil
 	}
 
 	return RepoSDetail{
-		Repo:   repoDoc,
+		Repo:   *repoDoc,
 		Issues: issues,
 	}, nil
 }

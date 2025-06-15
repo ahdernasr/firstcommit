@@ -3,112 +3,133 @@ package repository
 import (
 	"context"
 	"fmt"
-
-	"ai-in-action/internal/models"
+	"log"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+
+	"ai-in-action/internal/models"
 )
 
-// RepoMongo satisfies three different interfaces used across the service layer:
-//   - RepoRepository     – FindByID()
-//   - SearchRepoRepository – VectorSearch()
-//   - RepoRepository (guide_service) – FindByID() + GetTopContextChunks()
+// RepoMongo implements the repository interface for MongoDB.
 type RepoMongo struct {
-	metaCol   *mongo.Collection // "repos_meta" (one doc per repo)
-	chunkCol  *mongo.Collection // "repos_code" (code / readme chunks with embeddings)
-	vectorIdx string            // name of Atlas Vector Search index
+	metaColl *mongo.Collection // repos_meta collection
+	codeColl *mongo.Collection // repos_code collection
 }
 
-// NewRepoRepository wires the collections.
-//
-// Expected schema:
-//
-//	repos_meta
-//	  { _id: ObjectId, name, owner, full_name, stars, languages, image_url, vector: []float32 }
-//
-//	repos_code
-//	  { _id: ObjectId, repo_id: ObjectId, text: string, vector: []float32 }
-func NewRepoRepository(db *mongo.Database) *RepoMongo {
+// NewRepoRepository creates a new MongoDB repository instance.
+func NewRepoRepository(db *mongo.Database) (*RepoMongo, error) {
+	// Verify collections exist
+	collections, err := db.ListCollectionNames(context.Background(), bson.M{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list collections: %w", err)
+	}
+
+	hasMeta := false
+	hasCode := false
+	for _, coll := range collections {
+		if coll == "repos_meta" {
+			hasMeta = true
+		}
+		if coll == "repos_code" {
+			hasCode = true
+		}
+	}
+
+	if !hasMeta {
+		log.Printf("Warning: repos_meta collection not found")
+	}
+	if !hasCode {
+		log.Printf("Warning: repos_code collection not found")
+	}
+
 	return &RepoMongo{
-		metaCol:   db.Collection("repos_meta"),
-		chunkCol:  db.Collection("repos_code"),
-		vectorIdx: "repo_embedding_index",
-	}
+		metaColl: db.Collection("repos_meta"),
+		codeColl: db.Collection("repos_code"),
+	}, nil
 }
 
-// -------------------------- public API --------------------------------------
-
-// FindByID fetches a repo document by its string ObjectID (hex form).
-func (r *RepoMongo) FindByID(ctx context.Context, id string) (models.Repo, error) {
+// FindByID retrieves a repository by its ID.
+func (r *RepoMongo) FindByID(ctx context.Context, id string) (*models.Repo, error) {
 	var repo models.Repo
-	err := r.metaCol.FindOne(ctx, bson.M{"_id": id}).Decode(&repo)
-	return repo, err
+	err := r.metaColl.FindOne(ctx, bson.M{"_id": id}).Decode(&repo)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("repository not found: %s", id)
+		}
+		return nil, fmt.Errorf("failed to find repository: %w", err)
+	}
+	return &repo, nil
 }
 
-// VectorSearch performs a K‑NN search across repo embeddings.
-func (r *RepoMongo) VectorSearch(ctx context.Context, queryVec []float32, k int) ([]models.Repo, error) {
+// VectorSearch performs a vector similarity search on the repository embeddings.
+func (r *RepoMongo) VectorSearch(ctx context.Context, queryVector []float32, k int) ([]models.Repo, error) {
+	log.Printf("Building vector search pipeline with query vector length: %d", len(queryVector))
+
 	pipeline := mongo.Pipeline{
-		{{Key: "$vectorSearch", Value: bson.D{
-			{Key: "index", Value: r.vectorIdx},
-			{Key: "queryVector", Value: queryVec},
-			{Key: "path", Value: "vector"},
-			{Key: "numCandidates", Value: k * 10},
-			{Key: "limit", Value: k},
-		}}},
-		{{Key: "$project", Value: bson.D{
-			{Key: "vector", Value: 0}, // omit heavy field
-		}}},
+		{
+			{"$vectorSearch", bson.M{
+				"index":         "vector_index",
+				"path":          "embedding",
+				"queryVector":   queryVector,
+				"numCandidates": k * 10,
+				"limit":         k,
+				"similarity":    "cosine",
+			}},
+		},
+		{
+			{"$project", bson.M{
+				"_id":         1,
+				"owner":       1,
+				"name":        1,
+				"full_name":   1,
+				"description": 1,
+				"stars":       1,
+				"languages":   1,
+				"image_url":   1,
+				"score":       bson.M{"$meta": "vectorSearchScore"},
+			}},
+		},
+		{
+			{"$sort", bson.M{"score": -1}},
+		},
 	}
 
-	cur, err := r.metaCol.Aggregate(ctx, pipeline)
+	log.Printf("Executing vector search pipeline")
+	cursor, err := r.metaColl.Aggregate(ctx, pipeline)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("vector search failed: %w", err)
 	}
-	defer cur.Close(ctx)
+	defer cursor.Close(ctx)
 
-	var repos []models.Repo
-	if err := cur.All(ctx, &repos); err != nil {
-		return nil, err
+	var results []models.Repo
+	if err := cursor.All(ctx, &results); err != nil {
+		return nil, fmt.Errorf("vector search failed: failed to decode results: %w", err)
 	}
-	return repos, nil
+
+	log.Printf("Vector search returned %d results", len(results))
+	if len(results) > 0 {
+		log.Printf("First result score: %v", results[0].Score)
+	}
+	return results, nil
 }
 
-// GetTopContextChunks grabs the most similar code / README chunks for RAG.
-func (r *RepoMongo) GetTopContextChunks(ctx context.Context, repoID string, queryVec []float32, k int) ([]string, error) {
-	pipeline := mongo.Pipeline{
-		{{Key: "$match", Value: bson.M{"repo_id": repoID}}},
-		{{Key: "$vectorSearch", Value: bson.D{
-			{Key: "index", Value: "code_chunk_index"},
-			{Key: "queryVector", Value: queryVec},
-			{Key: "path", Value: "vector"},
-			{Key: "numCandidates", Value: k * 10},
-			{Key: "limit", Value: k},
-		}}},
-		{{Key: "$project", Value: bson.M{
-			"text": 1,
-		}}},
-	}
+// GetTopContextChunks retrieves the most relevant code chunks for a repository.
+func (r *RepoMongo) GetTopContextChunks(ctx context.Context, repoID string, k int) ([]models.CodeChunk, error) {
+	opts := options.Find().
+		SetSort(bson.M{"score": -1}).
+		SetLimit(int64(k))
 
-	cur, err := r.chunkCol.Aggregate(ctx, pipeline)
+	cursor, err := r.codeColl.Find(ctx, bson.M{"repo_id": repoID}, opts)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to find code chunks: %w", err)
 	}
-	defer cur.Close(ctx)
+	defer cursor.Close(ctx)
 
-	type chunk struct {
-		Text string `bson:"text"`
-	}
-	var out []chunk
-	if err := cur.All(ctx, &out); err != nil {
-		return nil, err
-	}
-	chunks := make([]string, len(out))
-	for i, c := range out {
-		chunks[i] = c.Text
-	}
-	if len(chunks) == 0 {
-		return nil, fmt.Errorf("no chunks found for repo %s", repoID)
+	var chunks []models.CodeChunk
+	if err := cursor.All(ctx, &chunks); err != nil {
+		return nil, fmt.Errorf("failed to decode code chunks: %w", err)
 	}
 	return chunks, nil
 }
