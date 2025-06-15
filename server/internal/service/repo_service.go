@@ -21,6 +21,7 @@ type RepoSDetail struct {
 // RepoService enriches repository data with live GitHub information.
 type RepoService interface {
 	GetRepo(ctx context.Context, repoID string) (RepoSDetail, error)
+	ListRepoIssues(ctx context.Context, owner, repoName, state string, perPage int) ([]models.Issue, error)
 }
 
 type repoService struct {
@@ -60,4 +61,13 @@ func (s *repoService) GetRepo(ctx context.Context, repoID string) (RepoSDetail, 
 		Repo:   *repoDoc,
 		Issues: issues,
 	}, nil
+}
+
+// ListRepoIssues fetches issues for a repo from GitHub.
+func (s *repoService) ListRepoIssues(ctx context.Context, owner, repoName, state string, perPage int) ([]models.Issue, error) {
+	issues, err := s.gh.ListRepoIssues(owner, repoName, state, perPage)
+	if err != nil {
+		return nil, err
+	}
+	return issues, nil
 }

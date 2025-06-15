@@ -4,10 +4,12 @@ import (
 	"log"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
 	"go.mongodb.org/mongo-driver/bson"
 
 	"ai-in-action/internal/config"
 	"ai-in-action/internal/database"
+	"ai-in-action/internal/github"
 	"ai-in-action/internal/handler"
 	"ai-in-action/internal/middleware"
 	"ai-in-action/internal/repository"
@@ -43,9 +45,12 @@ func main() {
 
 	// Initialize repositories
 	mainDB := mainClient.Database(cfg.DBName)
-	log.Printf("Using database: %s", cfg.DBName)
+	log.Printf("Using main database: %s", cfg.DBName)
 
-	repoRepo, err := repository.NewRepoRepository(mainDB)
+	federatedDB := federatedClient.Database("reposdb") // Use the correct federated database name
+	log.Printf("Using federated database: reposdb")
+
+	repoRepo, err := repository.NewRepoRepository(mainDB, federatedDB)
 	if err != nil {
 		log.Fatalf("Failed to initialize repository repository: %v", err)
 	}
@@ -60,24 +65,27 @@ func main() {
 		log.Printf("Available collections: %v", collections)
 	}
 
-	// Initialize Vertex AI embedder (for code search)
-	vertexEmbedder, err := service.NewVertexEmbedder()
+	// Initialize local embedders
+	metadataEmbedder, err := service.NewLocalEmbedder("metadata")
 	if err != nil {
-		log.Fatalf("Failed to initialize Vertex AI embedder: %v", err)
+		log.Fatalf("Failed to initialize metadata embedder: %v", err)
 	}
-	defer vertexEmbedder.Close()
+	defer metadataEmbedder.Close()
 
-	// Initialize Gemini embedder for repos_meta
-	geminiEmbedder, err := service.NewGeminiEmbedder()
+	codeEmbedder, err := service.NewLocalEmbedder("code")
 	if err != nil {
-		log.Fatalf("Failed to initialize Gemini embedder: %v", err)
+		log.Fatalf("Failed to initialize code embedder: %v", err)
 	}
-	defer geminiEmbedder.Close()
+	defer codeEmbedder.Close()
+
+	// Initialize GitHub client
+	ghClient := github.NewClient(cfg.GitHubToken)
+	log.Printf("Initialized GitHub client")
 
 	// Initialize services
-	searchSvc := service.NewSearchService(repoRepo, geminiEmbedder) // Use Gemini for repos_meta
-	repoSvc := service.NewRepoService(repoRepo, nil)                // TODO: Add GitHub client
-	guideSvc := service.NewGuideService(guideRepo, nil, repoRepo, geminiEmbedder, service.NewDummyLLM())
+	searchSvc := service.NewSearchService(repoRepo, metadataEmbedder)
+	repoSvc := service.NewRepoService(repoRepo, ghClient)
+	guideSvc := service.NewGuideService(guideRepo, ghClient, repoRepo, metadataEmbedder, service.NewDummyLLM())
 	chatSvc := service.NewChatService(guideSvc)
 
 	// Create Fiber app
@@ -88,9 +96,14 @@ func main() {
 
 	// Add middleware
 	app.Use(middleware.Logging())
+	app.Use(cors.New(cors.Config{
+		AllowOrigins: "*", // Allow all origins for development
+		AllowHeaders: "Origin, Content-Type, Accept",
+		AllowMethods: "GET, POST, PUT, DELETE, OPTIONS",
+	}))
 
 	// Register routes
-	handler.RegisterRoutes(app, searchSvc, repoSvc, guideSvc, chatSvc, repoRepo, vertexEmbedder)
+	handler.RegisterRoutes(app, searchSvc, repoSvc, guideSvc, chatSvc, repoRepo, metadataEmbedder, codeEmbedder)
 
 	// Add health check
 	healthHandler := handler.NewHealthHandler(mainClient, federatedClient)

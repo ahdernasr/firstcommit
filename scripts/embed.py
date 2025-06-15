@@ -11,6 +11,9 @@ from pymongo import MongoClient
 from pymongo import ReplaceOne, WriteConcern
 import certifi
 import time
+# Local embedding support
+from sentence_transformers import SentenceTransformer
+from concurrent.futures import ThreadPoolExecutor
 
 # Load environment
 BASE_DIR = Path(__file__).resolve().parent
@@ -96,6 +99,15 @@ aiplatform.init(project=PROJECT_ID, location=LOCATION)
 mongo_client = MongoClient(MONGO_URI, tls=True, tlsCAFile=certifi.where())
 db = mongo_client[MONGO_DB]
 
+# Local embedding models
+metadata_embedder = SentenceTransformer('all-mpnet-base-v2')
+code_embedder = SentenceTransformer("intfloat/multilingual-e5-large", trust_remote_code=True)
+try:
+    code_embedder.half()
+    code_embedder.quantize(8)
+except Exception as e:
+    print(f"[WARN] Could not enable half precision or quantization: {e}")
+
 # Debug: list primary DB collections before ingestion
 try:
     print(f"[DEBUG] Primary DB name: {MONGO_DB}")
@@ -104,24 +116,24 @@ except Exception as e:
     print(f"[DEBUG] Error listing primary collections: {e}")
 
 # Federated metadata client
-FEDERATED_DB_NAME = os.getenv("FEDERATED_DB_NAME", "repoinstance")
-federated_client = MongoClient(FEDERATED_MONGO_URI, tls=True, tlsCAFile=certifi.where())
-# Debug: list all databases available via federation
-try:
-    print(f"[DEBUG] Federated databases: {federated_client.list_database_names()}")
-except Exception as e:
-    print(f"[DEBUG] Error listing federated databases: {e}")
-federated_db = federated_client[FEDERATED_DB_NAME]
-federated_meta_coll = federated_db["repos_meta"]
-
-# Debug: show federated DB and collections
-print(f"[DEBUG] Federated DB name: {FEDERATED_DB_NAME}")
-try:
-    print(f"[DEBUG] Collections available: {federated_db.list_collection_names()}")
-    count_docs = federated_meta_coll.count_documents({})
-    print(f"[DEBUG] repos_meta document count: {count_docs}")
-except Exception as e:
-    print(f"[DEBUG] Error checking federated collections: {e}")
+# FEDERATED_DB_NAME = os.getenv("FEDERATED_DB_NAME", "repoinstance")
+# federated_client = MongoClient(FEDERATED_MONGO_URI, tls=True, tlsCAFile=certifi.where())
+# # Debug: list all databases available via federation
+# try:
+#     print(f"[DEBUG] Federated databases: {federated_client.list_database_names()}")
+# except Exception as e:
+#     print(f"[DEBUG] Error listing federated databases: {e}")
+# federated_db = federated_client[FEDERATED_DB_NAME]
+# federated_meta_coll = federated_db["repos_meta"]
+#
+# # Debug: show federated DB and collections
+# print(f"[DEBUG] Federated DB name: {FEDERATED_DB_NAME}")
+# try:
+#     print(f"[DEBUG] Collections available: {federated_db.list_collection_names()}")
+#     count_docs = federated_meta_coll.count_documents({})
+#     print(f"[DEBUG] repos_meta document count: {count_docs}")
+# except Exception as e:
+#     print(f"[DEBUG] Error checking federated collections: {e}")
 
 def upload_jsonl_to_gcs(local_path: str, gcs_path: str):
     bucket = storage_client.bucket(GCS_BUCKET)
@@ -328,15 +340,17 @@ def safe_code_chunks(text: str) -> list[str]:
 
 def main():
     overall_start = time.perf_counter()
-    # Reset code collection so we start fresh every run, but do NOT clear repos_meta
+    # Reset code collection so we start fresh every run, and clear repos_meta
     db["repos_code"].delete_many({})
     print("[DEBUG] Cleared repos_code collection")
+    db["repos_meta"].delete_many({})
+    print("[DEBUG] Cleared repos_meta collection")
 
-    # Use online Gemini embeddings for metadata (small test set)
-    embedding_model = TextEmbeddingModel.from_pretrained("gemini-embedding-001")
+    # Use local embedding model for metadata
+    embedding_model = metadata_embedder
 
     # ────────────────────────────────────────────────────────────────
-    # Metadata embeddings – inline Gemini calls (no batch job)
+    # Metadata embeddings – local embedding
     # ────────────────────────────────────────────────────────────────
     meta_start = time.perf_counter()
 
@@ -355,7 +369,9 @@ def main():
                             if isinstance(maybe_repo, dict):
                                 yield maybe_repo
 
-    for obj in yield_repo_objects(federated_meta_coll.find()):
+    with open("repos.json", "r") as f:
+        json_data = json.load(f)
+    for obj in yield_repo_objects(json_data):
         text = stringify_repo(obj)
         if not text.strip():
             continue
@@ -375,78 +391,136 @@ def main():
         if db["repos_meta"].find_one({"_id": _id}):
             continue
 
-        emb = embed_with_retry(embedding_model, text)
-        if emb is None:
-            continue
+        emb = embedding_model.encode(text, normalize_embeddings=True).tolist()
         print(f"[EMBED] {_id}: {token_count} tokens embedded")
-        time.sleep(EMBED_SLEEP)
 
         docs_to_insert.append({"_id": _id, "embedding": emb})
 
     if docs_to_insert:
         db["repos_meta"].insert_many(docs_to_insert, ordered=False)
-        print(f"[INFO] Inserted {len(docs_to_insert)} metadata embeddings (Gemini).")
+        print(f"[INFO] Inserted {len(docs_to_insert)} metadata embeddings (local model).")
     else:
         print("[WARN] No metadata docs to embed.")
 
     meta_elapsed = time.perf_counter() - meta_start
-    print(f"[TIME] Metadata section took {meta_elapsed:.2f}s (Gemini inline)")
+    print(f"[TIME] Metadata section took {meta_elapsed:.2f}s (local model)")
 
     code_start = time.perf_counter()
     # 2. Code embeddings
-    code_jsonl = "/tmp/repos_code.jsonl"
-    key_manifest = "/tmp/repos_code.keys"
+    from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    with open(code_jsonl, "w", encoding="utf-8") as fout_jsonl, \
-        open(key_manifest, "w", encoding="utf-8") as fout_keys:
+    MAX_PARALLEL_REPOS = 1  # Allow up to X repos in parallel
 
-        for repo_dir in (BASE_DIR / "repos").iterdir():
-            if not repo_dir.is_dir():
-                continue
-            for file_path in repo_dir.rglob("*.*"):
-                if not file_path.is_file():
-                    continue
+    def process_repo(repo_dir):
+        if not repo_dir.is_dir():
+            return 0
+        repo_start = time.perf_counter()
+        print(f"[PROCESS] Embedding repo: {repo_dir.name}")
+        file_count = 0
+        chunk_count = 0
 
-                # Skip large or binary‑type files
-                if file_path.suffix.lower() in BINARY_EXTS:
-                    continue
-                if file_path.stat().st_size > MAX_FILE_BYTES:
-                    continue
-
+        def handle_file(file_path):
+            nonlocal file_count, chunk_count
+            if not file_path.is_file():
+                return [], [], [], []
+            if file_path.suffix.lower() in BINARY_EXTS:
+                return [], [], [], []
+            # Remove MAX_FILE_BYTES check and implement new logic
+            # New logic: ≤1MB = single chunk, >1MB = chunked
+            if file_path.stat().st_size <= 1 * 1024 * 1024:
+                # For files ≤ 1MB, read entire content as one chunk
                 text = file_path.read_text(encoding="utf-8", errors="ignore")
-                chunks = safe_code_chunks(text)
+                boosted_chunk = f"[FILE: {file_path.name}] [PATH: {file_path.relative_to(repo_dir.parent)}]\n{text}"
+                chunks = [boosted_chunk]
+            else:
+                # For files > 1MB, read and chunk
+                text = file_path.read_text(encoding="utf-8", errors="ignore")
+                raw_chunks = safe_code_chunks(text)
+                chunks = [f"[FILE: {file_path.name}] [PATH: {file_path.relative_to(repo_dir.parent)}]\n{chunk}" for chunk in raw_chunks]
 
-                for idx, chunk in enumerate(chunks):
-                    # Construct a unique key for the chunk, including file path
-                    chunk_id = f"{repo_dir.name}/{file_path.relative_to(repo_dir.parent)}::chunk_{idx}"
-                    
-                    key_data = {
-                        "_id": chunk_id,
-                        "file": str(file_path.relative_to(repo_dir.parent)),
-                        "text": chunk
-                    }
+            chunk_local_ids = []
+            chunk_local_files = []
+            chunk_local_texts = []
 
-                    # Write the chunk for Vertex AI (content-only)
-                    fout_jsonl.write(json.dumps({"content": chunk}) + "\n")
+            for idx, chunk in enumerate(chunks):
+                chunk_id = f"{repo_dir.name}/{file_path.relative_to(repo_dir.parent)}::chunk_{idx}"
+                chunk_local_ids.append(chunk_id)
+                chunk_local_files.append(str(file_path.relative_to(repo_dir.parent)))
+                chunk_local_texts.append(chunk)
 
-                    # Record the identifier, file path, and text in the manifest as JSON
-                    fout_keys.write(json.dumps(key_data) + "\n")
-    line_count = sum(1 for _ in open(code_jsonl, "r", encoding="utf-8"))
-    if line_count == 0:
-        print("No code chunks to embed; skipping code batch job.")
-    else:
-        upload_jsonl_to_gcs(code_jsonl, "input/repos_code.jsonl")
-        upload_jsonl_to_gcs(key_manifest, "input/repos_code.keys")
-        code_output_dir = run_batch_job("input/repos_code.jsonl",
-                                        "output/repos_code",
-                                        "embed-code",
-                                        "code")
-        code_keys = download_text_blob(GCS_BUCKET, "input/repos_code.keys").splitlines()
-        ingest_predictions_to_mongo_fast(code_output_dir,
-                                         "repos_code",
-                                         iter(code_keys))
-        code_elapsed = time.perf_counter() - code_start
-        print(f"[TIME] Code section took {code_elapsed:.2f} s")
+            return chunks, chunk_local_ids, chunk_local_files, chunk_local_texts
+
+        all_chunks = []
+        chunk_ids = []
+        chunk_files = []
+        chunk_texts = []
+
+        files = [
+            f for f in repo_dir.rglob("*.*")
+            if not any(part.startswith('.') for part in f.relative_to(repo_dir).parts)
+        ]
+        file_count = len(files)
+
+        with ThreadPoolExecutor(max_workers=8) as inner_executor:
+            file_results = inner_executor.map(handle_file, files)
+            for chunks, ids, files_, texts in file_results:
+                all_chunks.extend(chunks)
+                chunk_ids.extend(ids)
+                chunk_files.extend(files_)
+                chunk_texts.extend(texts)
+                chunk_count += len(chunks)
+
+        inserted = 0
+        if all_chunks:
+            embeddings = []
+            batch_size = 64
+            for i in range(0, len(all_chunks), batch_size):
+                try:
+                    batch = code_embedder.encode(all_chunks[i:i+batch_size], normalize_embeddings=True)
+                    embeddings.extend(batch)
+                except Exception as e:
+                    print(f"[ERROR] Embedding batch {i//batch_size} failed: {e}")
+                    embeddings.extend([None] * len(all_chunks[i:i+batch_size]))
+            for i, emb in enumerate(embeddings):
+                if emb is None:
+                    continue
+                chunk_id = chunk_ids[i]
+                if db["repos_code"].find_one({"_id": chunk_id}):
+                    continue
+                doc = {
+                    "_id": chunk_id,
+                    "repo_id": repo_dir.name,
+                    "file": chunk_files[i],
+                    "text": chunk_texts[i],
+                    "embedding": emb.tolist()
+                }
+                db["repos_code"].replace_one({"_id": chunk_id}, doc, upsert=True)
+                inserted += 1
+        print(f"[EMBEDDED] {repo_dir.name}: {file_count} files, {chunk_count} chunks")
+        repo_elapsed = time.perf_counter() - repo_start
+        print(f"[TIME] {repo_dir.name} took {repo_elapsed:.2f}s")
+        return inserted
+
+    repo_dirs = list(Path("./repos").iterdir())
+
+    def process_repo_wrapper(repo_dir):
+        try:
+            return process_repo(repo_dir)
+        except Exception as e:
+            print(f"[ERROR] Failed processing {repo_dir.name}: {e}")
+            return 0
+
+    code_embeddings_inserted = 0
+    with ThreadPoolExecutor(max_workers=MAX_PARALLEL_REPOS) as outer_executor:
+        futures = {outer_executor.submit(process_repo_wrapper, repo): repo for repo in repo_dirs}
+        for future in as_completed(futures):
+            result = future.result()
+            code_embeddings_inserted += result
+
+    print(f"[INFO] Inserted code embeddings directly via local model.")
+
+    code_elapsed = time.perf_counter() - code_start
+    print(f"[TIME] Code section took {code_elapsed:.2f} s")
 
     # Final debug: list primary DB collections and counts
     try:

@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"strconv"
+	"strings"
 	"time"
 
 	"ai-in-action/internal/github"
@@ -112,10 +114,25 @@ func (s *guideService) GetGuide(ctx context.Context, issueID string) (models.Gui
 
 // parseIssueID converts "owner/repo#123" → ("owner","repo",123)
 func parseIssueID(id string) (owner, repo string, number int) {
-	// NOTE: Implement robust parsing; simplified placeholder:
-	// Expect format owner_repo_number (e.g., "torvalds_linux_123")
-	// TODO: implement real parsing logic
-	return "", "", 0
+	// Split by # to separate the repo part from the number
+	parts := strings.Split(id, "#")
+	if len(parts) != 2 {
+		return "", "", 0
+	}
+
+	// Parse the number
+	num, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return "", "", 0
+	}
+
+	// Split the repo part by / to get owner and repo name
+	repoParts := strings.Split(parts[0], "/")
+	if len(repoParts) != 2 {
+		return "", "", 0
+	}
+
+	return repoParts[0], repoParts[1], num
 }
 
 // EmbeddingClient abstracts your local embedding model.
