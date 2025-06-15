@@ -38,7 +38,18 @@ GCS_BUCKET = os.getenv("GCS_BUCKET")
 
 # --- embedding parameters ----------------------------------------------------
 MAX_CODE_TOKENS = 2048  # keep chunks small enough for Vertex AI batch limits
-MODEL_NAME = f"projects/{PROJECT_ID}/locations/{LOCATION}/publishers/google/models/text-embedding-005"
+# Skip any file larger than 500 KB or obviously binary assets
+MAX_FILE_BYTES = 500 * 1024
+BINARY_EXTS = {
+    ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".ico",
+    ".pdf", ".svg", ".wasm", ".zip", ".gz", ".tar", ".tgz", ".bz2",
+    ".7z", ".exe", ".dll", ".so", ".dylib", ".bin", ".dat", ".mp4",
+    ".mp3", ".wav", ".ogg", ".mov"
+}
+# Safety slice for minified / long‑token chunks
+MAX_CHUNK_BYTES = 32 * 1024  # 32 KiB
+METADATA_MODEL_NAME = f"projects/{PROJECT_ID}/locations/{LOCATION}/publishers/google/models/gemini-embedding-001"
+CODE_MODEL_NAME = f"projects/{PROJECT_ID}/locations/{LOCATION}/publishers/google/models/text-embedding-005"
 
 MONGO_DB = os.getenv("MONGO_DB_NAME", "repos")
 
@@ -85,16 +96,26 @@ def download_text_blob(bucket_name: str, blob_name: str) -> str:
     blob = storage_client.bucket(bucket_name).blob(blob_name)
     return blob.download_as_text()
 
-def run_batch_job(input_gcs: str, output_prefix: str, display_name: str):
+def run_batch_job(input_gcs: str, output_prefix: str, display_name: str, job_type: str):
     print(f"Starting batch prediction: {display_name}")
-    job = aiplatform.BatchPredictionJob.create(
+    if job_type == "metadata":
+        job = aiplatform.BatchPredictionJob.create(
+            job_display_name=display_name,
+            model_name=METADATA_MODEL_NAME,
+            instances_format="jsonl",
+            predictions_format="jsonl",
+            gcs_source=[f"gs://{GCS_BUCKET}/{input_gcs}"],
+            gcs_destination_prefix=f"gs://{GCS_BUCKET}/{output_prefix}",
+        )
+    else:
+        job = aiplatform.BatchPredictionJob.create(
         job_display_name=display_name,
-        model_name=MODEL_NAME,
+        model_name=CODE_MODEL_NAME,
         instances_format="jsonl",
         predictions_format="jsonl",
         gcs_source=[f"gs://{GCS_BUCKET}/{input_gcs}"],
         gcs_destination_prefix=f"gs://{GCS_BUCKET}/{output_prefix}",
-    )
+        )
     job.wait()
     output_dir = job.output_info.gcs_output_directory  # e.g. gs://bucket/output/repos_code/1234567890
     print(f"Batch prediction {display_name} completed at {output_dir}")
@@ -124,23 +145,43 @@ def ingest_predictions_to_mongo_fast(output_prefix: str,
 
     bucket = storage_client.bucket(GCS_BUCKET)
     shards = sorted(
-        b for b in bucket.list_blobs(prefix=f"{output_prefix}/")
-        if b.name.endswith(".jsonl") and b.name.count('/') == output_prefix.count('/') + 1
+        (
+            b
+            for b in bucket.list_blobs(prefix=f"{output_prefix}/")
+            if b.name.endswith(".jsonl")
+            and b.name.count('/') == output_prefix.count('/') + 1
+        ),
+        key=lambda bl: bl.name,  # sort by filename; avoids TypeError on Blob objects
     )
 
     line_iter = (ln for bl in shards for ln in bl.download_as_text().splitlines())
 
     bulk: list[ReplaceOne] = []
     inserted = 0
-    for key, line in zip(key_iter, line_iter):
+    keys = list(key_iter)
+    total_pred = 0
+    for i, line in enumerate(line_iter):
+        total_pred += 1
+        if i >= len(keys):
+            print(f"[WARN] prediction row {i} has no matching key; skipping")
+            continue
+
+        raw_key = keys[i]
+        if "|" in raw_key:
+            # Metadata keys: '00000042|owner/repo' → owner/repo
+            real_id = raw_key.split("|", 1)[1]
+        else:
+            # Code‑chunk keys already have the final id
+            real_id = raw_key
+
         emb = json.loads(line)["predictions"][0]["embeddings"]["values"]
 
         doc = {
-            "_id": key,
+            "_id": real_id,
             "embedding": emb,
         }
 
-        bulk.append(ReplaceOne({"_id": key}, doc, upsert=True))
+        bulk.append(ReplaceOne({"_id": real_id}, doc, upsert=True))
         if len(bulk) >= batch_size:
             coll.bulk_write(bulk, ordered=False)
             inserted += len(bulk)
@@ -150,7 +191,33 @@ def ingest_predictions_to_mongo_fast(output_prefix: str,
         coll.bulk_write(bulk, ordered=False)
         inserted += len(bulk)
 
-    print(f"[FAST] Inserted {inserted} docs into '{collection_name}'")
+    print(f"[FAST] Inserted {inserted} docs into '{collection_name}' "
+          f"(predictions seen: {total_pred}, keys: {len(keys)})")
+
+def stringify_repo(repo: dict) -> str:
+    """
+    Flatten every value in the repo dict into a single space‑separated string.
+    Lists and nested dicts are traversed recursively so all primitive values
+    (str, int, float, bool) contribute tokens for embedding.
+    """
+    parts: list[str] = []
+
+    def walk(value):
+        if value is None:
+            return
+        if isinstance(value, str):
+            parts.append(value)
+        elif isinstance(value, (int, float, bool)):
+            parts.append(str(value))
+        elif isinstance(value, list):
+            for v in value:
+                walk(v)
+        elif isinstance(value, dict):
+            for v in value.values():
+                walk(v)
+
+    walk(repo)
+    return " ".join(parts)
 
 def chunk_text_by_token_limit(text: str, max_tokens: int = MAX_CODE_TOKENS) -> list[str]:
     """
@@ -167,6 +234,24 @@ def chunk_text_by_token_limit(text: str, max_tokens: int = MAX_CODE_TOKENS) -> l
     if current:
         chunks.append(" ".join(current))
     return chunks
+
+def safe_code_chunks(text: str) -> list[str]:
+    """
+    Returns chunks that are <= MAX_CODE_TOKENS *and* <= MAX_CHUNK_BYTES.
+    Handles minified code with few spaces by slicing on bytes.
+    """
+    primary = chunk_text_by_token_limit(text, max_tokens=MAX_CODE_TOKENS)
+    safe: list[str] = []
+    for chunk in primary:
+        b = chunk.encode("utf-8", errors="ignore")
+        if len(b) <= MAX_CHUNK_BYTES:
+            safe.append(chunk)
+        else:
+            # Slice hard every MAX_CHUNK_BYTES bytes
+            for i in range(0, len(b), MAX_CHUNK_BYTES):
+                part_bytes = b[i : i + MAX_CHUNK_BYTES]
+                safe.append(part_bytes.decode("utf-8", errors="ignore"))
+    return safe
 
 def main():
     overall_start = time.perf_counter()
@@ -206,20 +291,23 @@ def main():
                 # Skip anything else (e.g. primitive types)
 
         # Iterate over every repo object and write to JSONL + manifest
-        for obj in yield_repo_objects(federated_meta_coll.find()):
-            text = " ".join(filter(None, [obj.get("name"), obj.get("description") or ""]))
+        for idx, obj in enumerate(yield_repo_objects(federated_meta_coll.find())):
+            # Only use name, description, and topics for embedding
+            text = stringify_repo(obj)
             if not text.strip():
+                print(f"[WARN] Skipping empty metadata record: {obj}")
                 # Skip empty metadata records
                 continue
-
-            fout_jsonl.write(json.dumps({"content": text}) + "\n")
-            # Choose a stable, non‑None identifier; fall back to random hex.
-            key = (
+            
+            fout_jsonl.write(json.dumps({"content": text, "task_type": "RETRIEVAL_DOCUMENT"}) + "\n")
+            # ⬇️ Deterministic key with row prefix so ingest alignment is guaranteed
+            base_id = (
                 obj.get("full_name")                      # e.g. owner/repo
                 or obj.get("name")                        # repo name
                 or (str(obj["_id"]) if obj.get("_id") is not None else None)
                 or os.urandom(8).hex()                    # guaranteed unique
             )
+            key = f"{idx:08d}|{base_id}"
             fout_keys.write(key + "\n")
 
     # Only proceed if there is data
@@ -233,7 +321,8 @@ def main():
         # ─── run batch job & ingest ────────────────────────────────
         meta_output_dir = run_batch_job("input/repos_meta.jsonl",
                                         "output/repos_meta",
-                                        "embed-metadata")
+                                        "embed-metadata",
+                                        "metadata")
         meta_keys = download_text_blob(GCS_BUCKET, "input/repos_meta.keys").splitlines()
         ingest_predictions_to_mongo_fast(meta_output_dir,
                                          "repos_meta",
@@ -256,8 +345,14 @@ def main():
                 if not file_path.is_file():
                     continue
 
+                # Skip large or binary‑type files
+                if file_path.suffix.lower() in BINARY_EXTS:
+                    continue
+                if file_path.stat().st_size > MAX_FILE_BYTES:
+                    continue
+
                 text = file_path.read_text(encoding="utf-8", errors="ignore")
-                chunks = chunk_text_by_token_limit(text, max_tokens=MAX_CODE_TOKENS)
+                chunks = safe_code_chunks(text)
 
                 for idx, chunk in enumerate(chunks):
                     key = f"{repo_dir.name}/{file_path.relative_to(repo_dir.parent)}::chunk_{idx}"
@@ -275,7 +370,8 @@ def main():
         upload_jsonl_to_gcs(key_manifest, "input/repos_code.keys")
         code_output_dir = run_batch_job("input/repos_code.jsonl",
                                         "output/repos_code",
-                                        "embed-code")
+                                        "embed-code",
+                                        "code")
         code_keys = download_text_blob(GCS_BUCKET, "input/repos_code.keys").splitlines()
         ingest_predictions_to_mongo_fast(code_output_dir,
                                          "repos_code",
