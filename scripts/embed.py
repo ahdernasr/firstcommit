@@ -52,7 +52,39 @@ MAX_CHUNK_BYTES = 32 * 1024  # 32 KiB
 # Gemini online embedding quotas are limited to ~64 k tokens/min.
 # Keep each metadata string small and pace requests.
 MAX_METADATA_BYTES = 32 * 1024      # 32 KiB per repo
-EMBED_SLEEP = 12                    # seconds to wait between requests
+EMBED_SLEEP = 30                    # seconds to wait between requests (quota-safe)
+
+# ------------------------------------------------------------------
+# Helper: embed with retry & exponential back-off to survive quota hits
+# ------------------------------------------------------------------
+def embed_with_retry(model: TextEmbeddingModel,
+                     text: str,
+                     base_wait: int = EMBED_SLEEP,
+                     max_total_wait: int = 15 * 60) -> list[float] | None:
+    """
+    Call model.get_embeddings([text]) with exponential back-off until it
+    succeeds or max_total_wait seconds have elapsed.
+
+    Returns the embedding list, or None if it ultimately fails.
+    """
+    total_wait = 0
+    wait = base_wait
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            return model.get_embeddings([text])[0].values
+        except Exception as exc:
+            if "RESOURCE_EXHAUSTED" not in str(exc):
+                raise  # Not a quota error → propagate
+            if total_wait >= max_total_wait:
+                print(f"[ERROR] Giving up on embedding after {attempt} attempts "
+                      f"({total_wait}s total wait); skipping.")
+                return None
+            print(f"[WARN] Quota hit (attempt {attempt}); sleeping {wait}s …")
+            time.sleep(wait)
+            total_wait += wait
+            wait = min(wait * 2, 5 * 60)  # cap individual wait at 5 min
 METADATA_MODEL_NAME = f"projects/{PROJECT_ID}/locations/{LOCATION}/publishers/google/models/gemini-embedding-001"
 CODE_MODEL_NAME = f"projects/{PROJECT_ID}/locations/{LOCATION}/publishers/google/models/text-embedding-005"
 
@@ -127,6 +159,26 @@ def run_batch_job(input_gcs: str, output_prefix: str, display_name: str, job_typ
     # Strip the bucket prefix so we can reuse it as a relative path
     return output_dir.replace(f"gs://{GCS_BUCKET}/", "")
 
+def get_repo_id_from_chunk_id(chunk_id: str) -> str:
+    """
+    Extracts the repo_id (e.g., 'owner/repo') from a code chunk _id.
+    Assumes _id format: 'owner/repo/path/to/file::chunk_idx' or 'repo_name/path/to/file::chunk_idx'.
+    """
+    # First, remove the '::chunk_idx' suffix if present
+    base_path = chunk_id.split('::')[0]
+
+    # Split by '/'
+    parts = base_path.split('/')
+
+    # If it's 'owner/repo/path' form, take 'owner/repo'
+    if len(parts) >= 2:
+        return f"{parts[0]}/{parts[1]}"
+    # If it's just 'repo_name/path' form, take 'repo_name'
+    elif len(parts) == 1:
+        return parts[0]
+    else: # Should not happen for valid chunk_ids
+        return ""
+
 def ingest_predictions_to_mongo_fast(output_prefix: str,
                                      collection_name: str,
                                      key_iter,
@@ -172,12 +224,17 @@ def ingest_predictions_to_mongo_fast(output_prefix: str,
             continue
 
         raw_key = keys[i]
-        if "|" in raw_key:
-            # Metadata keys: '00000042|owner/repo' → owner/repo
-            real_id = raw_key.split("|", 1)[1]
-        else:
-            # Code‑chunk keys already have the final id
+        if collection_name == "repos_meta": # Original logic for metadata
+            if "|" in raw_key:
+                # Metadata keys: '00000042|owner/repo' → owner/repo
+                real_id = raw_key.split("|", 1)[1]
+            else:
+                # Metadata keys already have the final id
+                real_id = raw_key
+            repo_id = None # Not applicable for repos_meta itself
+        else: # Logic for repos_code
             real_id = raw_key
+            repo_id = get_repo_id_from_chunk_id(real_id)
 
         emb = json.loads(line)["predictions"][0]["embeddings"]["values"]
 
@@ -185,6 +242,12 @@ def ingest_predictions_to_mongo_fast(output_prefix: str,
             "_id": real_id,
             "embedding": emb,
         }
+        if repo_id: # Only add repo_id if it's extracted (i.e., for code chunks)
+            doc["repo_id"] = repo_id
+
+        # For repos_code, we also want to preserve the original file path and text.
+        # This would require modifying the key manifest to include these, or passing them through.
+        # For now, we only add repo_id.
 
         bulk.append(ReplaceOne({"_id": real_id}, doc, upsert=True))
         if len(bulk) >= batch_size:
@@ -297,19 +360,11 @@ def main():
         if len(text.encode("utf-8")) > MAX_METADATA_BYTES:
             text = text.encode("utf-8")[:MAX_METADATA_BYTES].decode("utf-8", errors="ignore")
 
-        # Online embedding call – one per repo, with retry/backoff
-        for attempt in range(3):
-            try:
-                emb = embedding_model.get_embeddings([text])[0].values
-                break
-            except Exception as exc:
-                if "RESOURCE_EXHAUSTED" in str(exc) and attempt < 2:
-                    wait = EMBED_SLEEP * (attempt + 1)
-                    print(f"[WARN] Quota hit, sleeping {wait}s then retrying...")
-                    time.sleep(wait)
-                    continue
-                raise
-        time.sleep(EMBED_SLEEP)   # steady pacing
+        # Online embedding call with robust retry/back‑off
+        emb = embed_with_retry(embedding_model, text)
+        if emb is None:
+            continue            # skip repo on persistent failure
+        time.sleep(EMBED_SLEEP)  # steady pacing
 
         _id = (
             obj.get("full_name")
