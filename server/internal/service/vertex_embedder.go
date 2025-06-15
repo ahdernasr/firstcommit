@@ -69,86 +69,83 @@ func NewGeminiEmbedder() (*GeminiEmbedder, error) {
 	}, nil
 }
 
-// Embed generates a 768‑dimensional embedding vector for the input text
-// using task_type = "RETRIEVAL_QUERY" so it aligns with document embeddings.
-func (v *VertexEmbedder) Embed(text string) ([]float32, error) {
-	ctx := context.Background()
-
-	// Create instance with content and explicit task type for semantic search
-	instance, err := structpb.NewStruct(map[string]interface{}{
-		"content":   text,
-		"task_type": "RETRIEVAL_QUERY",
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create instance: %w", err)
+func embedBatch(ctx context.Context, client *aiplatform.PredictionClient, modelName string, texts []string) ([][]float32, error) {
+	instances := make([]*structpb.Value, len(texts))
+	for i, text := range texts {
+		instance, err := structpb.NewStruct(map[string]interface{}{
+			"content":   text,
+			"task_type": "RETRIEVAL_QUERY",
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create instance: %w", err)
+		}
+		instances[i] = structpb.NewStructValue(instance)
 	}
 
-	// Create prediction request
 	req := &aiplatformpb.PredictRequest{
-		Endpoint:  v.modelName,
-		Instances: []*structpb.Value{structpb.NewStructValue(instance)},
+		Endpoint:  modelName,
+		Instances: instances,
 	}
 
-	// Get prediction
-	resp, err := v.client.Predict(ctx, req)
+	resp, err := client.Predict(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get prediction: %w", err)
 	}
 
-	// Extract embeddings from response
 	if len(resp.Predictions) == 0 {
 		return nil, fmt.Errorf("no predictions returned")
 	}
 
-	prediction := resp.Predictions[0].GetStructValue()
-	embeddings := prediction.GetFields()["embeddings"].GetStructValue()
-	values := embeddings.GetFields()["values"].GetListValue().GetValues()
+	embeddingsBatch := make([][]float32, len(resp.Predictions))
+	for i, predictionValue := range resp.Predictions {
+		prediction := predictionValue.GetStructValue()
+		embeddings := prediction.GetFields()["embeddings"].GetStructValue()
+		values := embeddings.GetFields()["values"].GetListValue().GetValues()
 
-	// Convert to float32 slice
-	result := make([]float32, len(values))
-	for i, v := range values {
-		result[i] = float32(v.GetNumberValue())
+		result := make([]float32, len(values))
+		for j, v := range values {
+			result[j] = float32(v.GetNumberValue())
+		}
+		embeddingsBatch[i] = result
 	}
 
-	return result, nil
+	return embeddingsBatch, nil
 }
 
-// Embed generates an embedding vector for the input text using Gemini
-func (g *GeminiEmbedder) Embed(text string) ([]float32, error) {
+// EmbedBatch generates embedding vectors for multiple input texts using VertexEmbedder
+func (v *VertexEmbedder) EmbedBatch(texts []string) ([][]float32, error) {
 	ctx := context.Background()
+	return embedBatch(ctx, v.client, v.modelName, texts)
+}
 
-	instance, err := structpb.NewStruct(map[string]interface{}{
-		"content":   text,
-		"task_type": "RETRIEVAL_QUERY",
-	})
+// EmbedBatch generates embedding vectors for multiple input texts using GeminiEmbedder
+func (g *GeminiEmbedder) EmbedBatch(texts []string) ([][]float32, error) {
+	ctx := context.Background()
+	return embedBatch(ctx, g.client, g.modelName, texts)
+}
+
+// Embed generates an embedding vector for a single input text using VertexEmbedder
+func (v *VertexEmbedder) Embed(text string) ([]float32, error) {
+	embeddings, err := v.EmbedBatch([]string{text})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create instance: %w", err)
+		return nil, err
 	}
-
-	req := &aiplatformpb.PredictRequest{
-		Endpoint:  g.modelName,
-		Instances: []*structpb.Value{structpb.NewStructValue(instance)},
+	if len(embeddings) == 0 {
+		return nil, fmt.Errorf("no embedding returned for text")
 	}
+	return embeddings[0], nil
+}
 
-	resp, err := g.client.Predict(ctx, req)
+// Embed generates an embedding vector for a single input text using GeminiEmbedder
+func (g *GeminiEmbedder) Embed(text string) ([]float32, error) {
+	embeddings, err := g.EmbedBatch([]string{text})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get prediction: %w", err)
+		return nil, err
 	}
-
-	if len(resp.Predictions) == 0 {
-		return nil, fmt.Errorf("no predictions returned")
+	if len(embeddings) == 0 {
+		return nil, fmt.Errorf("no embedding returned for text")
 	}
-
-	prediction := resp.Predictions[0].GetStructValue()
-	embeddings := prediction.GetFields()["embeddings"].GetStructValue()
-	values := embeddings.GetFields()["values"].GetListValue().GetValues()
-
-	result := make([]float32, len(values))
-	for i, v := range values {
-		result[i] = float32(v.GetNumberValue())
-	}
-
-	return result, nil
+	return embeddings[0], nil
 }
 
 // Close releases the Vertex AI client resources

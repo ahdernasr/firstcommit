@@ -22,6 +22,7 @@ type GuideRepository interface {
 type RepoRepository interface {
 	FindByID(ctx context.Context, repoID string) (*models.Repo, error)
 	GetTopContextChunks(ctx context.Context, repoID string, k int) ([]models.CodeChunk, error)
+	CodeVectorSearch(ctx context.Context, repoID string, queryVec []float32, k int) ([]models.CodeChunk, error)
 }
 
 // ---- Service implementation ------------------------------------------------

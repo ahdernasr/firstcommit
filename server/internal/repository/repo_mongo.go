@@ -115,6 +115,54 @@ func (r *RepoMongo) VectorSearch(ctx context.Context, queryVector []float32, k i
 	return results, nil
 }
 
+// CodeVectorSearch performs a vector similarity search on code chunks.
+func (r *RepoMongo) CodeVectorSearch(ctx context.Context, repoID string, queryVector []float32, k int) ([]models.CodeChunk, error) {
+	log.Printf("Building code vector search pipeline for repo %s with query vector length: %d", repoID, len(queryVector))
+
+	pipeline := mongo.Pipeline{
+		{
+			{"$vectorSearch", bson.M{
+				"index":         "vector_index",
+				"path":          "embedding",
+				"queryVector":   queryVector,
+				"numCandidates": k * 10,
+				"limit":         k,
+				"similarity":    "cosine",
+			}},
+		},
+		{
+			{"$match", bson.M{"repo_id": repoID}},
+		},
+		{
+			{"$project", bson.M{
+				"_id":     1,
+				"repo_id": 1,
+				"text":    1,
+				"file":    1,
+				"score":   bson.M{"$meta": "vectorSearchScore"},
+			}},
+		},
+		{
+			{"$sort", bson.M{"score": -1}},
+		},
+	}
+
+	log.Printf("Executing code vector search pipeline for repo %s", repoID)
+	cursor, err := r.codeColl.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, fmt.Errorf("code vector search failed: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	var results []models.CodeChunk
+	if err := cursor.All(ctx, &results); err != nil {
+		return nil, fmt.Errorf("code vector search failed: failed to decode results: %w", err)
+	}
+
+	log.Printf("Code vector search returned %d results for repo %s", len(results), repoID)
+	return results, nil
+}
+
 // GetTopContextChunks retrieves the most relevant code chunks for a repository.
 func (r *RepoMongo) GetTopContextChunks(ctx context.Context, repoID string, k int) ([]models.CodeChunk, error) {
 	opts := options.Find().

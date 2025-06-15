@@ -60,12 +60,12 @@ func main() {
 		log.Printf("Available collections: %v", collections)
 	}
 
-	// Initialize Vertex AI embedder
-	embedder, err := service.NewVertexEmbedder()
+	// Initialize Vertex AI embedder (for code search)
+	vertexEmbedder, err := service.NewVertexEmbedder()
 	if err != nil {
 		log.Fatalf("Failed to initialize Vertex AI embedder: %v", err)
 	}
-	defer embedder.Close()
+	defer vertexEmbedder.Close()
 
 	// Initialize Gemini embedder for repos_meta
 	geminiEmbedder, err := service.NewGeminiEmbedder()
@@ -75,8 +75,8 @@ func main() {
 	defer geminiEmbedder.Close()
 
 	// Initialize services
-	searchSvc := service.NewSearchService(repoRepo, geminiEmbedder)
-	repoSvc := service.NewRepoService(repoRepo, nil) // TODO: Add GitHub client
+	searchSvc := service.NewSearchService(repoRepo, geminiEmbedder) // Use Gemini for repos_meta
+	repoSvc := service.NewRepoService(repoRepo, nil)                // TODO: Add GitHub client
 	guideSvc := service.NewGuideService(guideRepo, nil, repoRepo, geminiEmbedder, service.NewDummyLLM())
 	chatSvc := service.NewChatService(guideSvc)
 
@@ -90,7 +90,7 @@ func main() {
 	app.Use(middleware.Logging())
 
 	// Register routes
-	handler.RegisterRoutes(app, searchSvc, repoSvc, guideSvc, chatSvc)
+	handler.RegisterRoutes(app, searchSvc, repoSvc, guideSvc, chatSvc, repoRepo, vertexEmbedder)
 
 	// Add health check
 	healthHandler := handler.NewHealthHandler(mainClient, federatedClient)
