@@ -1,0 +1,30 @@
+# Ignore large data files
+scripts/repos/
+scripts/repos.json
+scripts/repos_ndjson.jsonl
+scripts/*.jsonl
+scripts/*.json
+
+# Go specific
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# IDE specific
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db 
