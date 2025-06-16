@@ -80,7 +80,7 @@ func NewRepoRepository(primaryDB, federatedDB *mongo.Database) (*RepoMongo, erro
 
 // FindByID retrieves a repository by its ID.
 func (r *RepoMongo) FindByID(ctx context.Context, id string) (*models.Repo, error) {
-	filter := bson.M{"full_name": "vuejs/" + id}
+	filter := bson.M{"full_name": id}
 	var repo models.Repo
 	err := r.federatedMetaColl.FindOne(ctx, filter).Decode(&repo)
 	if err != nil {

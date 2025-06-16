@@ -72,7 +72,7 @@ func (s *RAGService) GenerateResponse(ctx context.Context, req RAGRequest) (*RAG
 				"numCandidates": 100,
 				"limit":         10,
 				"similarity":    "cosine",
-				"filter":        bson.M{"repo_id": "vue"},
+				"filter":        bson.M{"repo_id": req.RepoID},
 			}},
 		},
 		{
