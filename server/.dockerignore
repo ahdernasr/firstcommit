@@ -1,7 +1,9 @@
-# Ignore large data files in scripts directory
-scripts/repos/
-scripts/repos.json
-scripts/repos_ndjson.jsonl
+# Ignore all scripts by default
+scripts/
+
+# Allow only required scripts
+!scripts/embed.py
+!scripts/search.py
 
 # Git
 .git

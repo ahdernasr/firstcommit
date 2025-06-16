@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -49,8 +50,20 @@ print(','.join(map(str, embedding.tolist())))
 	// Log the command we're about to run
 	log.Printf("Executing Python script with model type: %s", l.modelType)
 
+	// Get Python path from environment or use appropriate default
+	pythonPath := os.Getenv("PYTHON_PATH")
+	if pythonPath == "" {
+		// Check if we're in a Docker container
+		if _, err := os.Stat("/app/venv/bin/python"); err == nil {
+			pythonPath = "/app/venv/bin/python"
+		} else {
+			// Use system Python in development
+			pythonPath = "python3"
+		}
+	}
+
 	// Call Python script to generate embedding
-	cmd := exec.Command("python3", "-c", pythonScript)
+	cmd := exec.Command(pythonPath, "-c", pythonScript)
 
 	// Capture both stdout and stderr
 	var stdout, stderr bytes.Buffer

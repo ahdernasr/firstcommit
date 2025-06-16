@@ -141,11 +141,6 @@ func (r *RepoMongo) VectorSearch(ctx context.Context, queryVector []float32, k i
 				"numCandidates": k * 10,
 				"limit":         k,
 				"similarity":    "cosine",
-				// Add filter for active repositories
-				"filter": bson.M{
-					"archived":   false,
-					"visibility": "public",
-				},
 			}},
 		},
 		{
@@ -213,7 +208,8 @@ func (r *RepoMongo) VectorSearch(ctx context.Context, queryVector []float32, k i
 			continue // Skip if full metadata not found
 		}
 		log.Printf("Found metadata for repo: %s (full_name: %s)", fullRepo.Name, fullRepo.FullName)
-		fullRepo.Score = result.RelevanceScore // Use the enhanced relevance score
+		// Use the vector search score directly instead of the relevance score
+		fullRepo.Score = result.Score
 		enrichedResults = append(enrichedResults, *fullRepo)
 	}
 

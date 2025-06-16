@@ -110,9 +110,18 @@ func main() {
 	})
 
 	// Add middleware
-	app.Use(cors.New())
+	app.Use(cors.New(cors.Config{
+		AllowOrigins: "https://frontend-222198140851.us-central1.run.app,http://localhost:3000",
+		AllowMethods: "GET,POST,PUT,DELETE,OPTIONS",
+		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
+		MaxAge:       300, // Cache preflight requests for 5 minutes
+	}))
 	app.Use(logger.New())
 	app.Use(recover.New())
+
+	app.Options("/*", func(c *fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusOK)
+	})
 
 	// Register routes
 	handler.RegisterRoutes(app, searchSvc, repoSvc, guideSvc, chatSvc, repoRepo, metadataEmbedder, codeEmbedder)

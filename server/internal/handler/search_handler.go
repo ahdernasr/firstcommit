@@ -36,5 +36,7 @@ func (h *SearchHandler) search(c *fiber.Ctx) error {
 		})
 	}
 
-	return c.JSON(repos)
+	return c.JSON(fiber.Map{
+		"repositories": repos,
+	})
 }
