@@ -1,11 +1,23 @@
 package service
 
-import "ai-in-action/internal/models"
+import (
+	"fmt"
+
+	"github.com/ahmednasr/ai-in-action/server/internal/models"
+)
 
 type dummyEmbedder struct{}
 
-func (d dummyEmbedder) Embed(string) ([]float32, error) {
-	return make([]float32, 768), nil
+func (d dummyEmbedder) Embed(text string) ([]float32, error) {
+	if text == "" {
+		return nil, fmt.Errorf("empty text provided")
+	}
+	// Return a fixed-size embedding vector with some non-zero values
+	embedding := make([]float32, 768)
+	for i := range embedding {
+		embedding[i] = 0.1 // Small non-zero value
+	}
+	return embedding, nil
 }
 
 func NewDummyEmbedder() EmbeddingClient {

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"ai-in-action/internal/github"
-	"ai-in-action/internal/models"
+	"github.com/ahmednasr/ai-in-action/server/internal/github"
+	"github.com/ahmednasr/ai-in-action/server/internal/models"
 )
 
 // ---- Repository layer contracts -------------------------------------------

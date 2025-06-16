@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"ai-in-action/internal/models"
+	"github.com/ahmednasr/ai-in-action/server/internal/models"
 )
 
 // ---- Repository contract ---------------------------------------------------

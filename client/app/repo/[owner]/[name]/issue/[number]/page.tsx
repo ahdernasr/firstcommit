@@ -84,7 +84,7 @@ export default function IssuePage() {
     const fetchIssue = async () => {
       try {
         const response = await fetch(
-          `http://localhost:8080/api/v1/repos/${params.owner}/${params.name}/issues/${params.number}`,
+          `https://api.github.com/repos/${params.owner}/${params.name}/issues/${params.number}`,
         )
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`)
@@ -175,33 +175,47 @@ export default function IssuePage() {
     // Re-enable auto-scroll when user sends a message
     setShouldAutoScroll(true)
 
-    // 2) Simulate AI "thinking" / Send message to backend
+    // 2) Send message to backend
     setIsGenerating(true)
     try {
-      const response = await fetch(`http://localhost:8080/api/v1/chat`, {
+      const requestBody = {
+        query: input.trim(),
+        repo_id: `${params.owner}/${params.name}`,
+      }
+      console.log("Sending request:", requestBody)
+
+      const response = await fetch("http://localhost:8080/api/v1/rag", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          repoID: `${params.owner}/${params.name}`,
-          issueNumber: parseInt(params.number as string),
-          message: input.trim(),
-          // TODO: Pass conversation history if implementing multi-turn chat
-        }),
+        body: JSON.stringify(requestBody),
       })
 
+      let errorMessage = `Failed to get AI response (${response.status})`
+      
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        // Clone the response before reading it
+        const responseClone = response.clone()
+        try {
+          const data = await responseClone.json()
+          errorMessage = data.error || errorMessage
+        } catch {
+          // If JSON parsing fails, try to get the text from the original response
+          const text = await response.text()
+          errorMessage = text || errorMessage
+        }
+        throw new Error(errorMessage)
       }
 
       const data = await response.json()
+      console.log("Received response:", data)
 
       const assistantMessageId = (Date.now() + 1).toString()
       const assistantMessage: Message = {
         id: assistantMessageId,
         role: "assistant",
-        content: data.response || "No response from AI.", // Assuming backend returns a 'response' field
+        content: data.answer || "No response from AI.",
       }
       setMessages((prev) => [...prev, assistantMessage])
 
@@ -215,7 +229,7 @@ export default function IssuePage() {
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: "Error communicating with AI. Please try again.",
+        content: error instanceof Error ? error.message : "Error communicating with AI. Please try again.",
       }
       setMessages((prev) => [...prev, errorMessage])
     } finally {
@@ -548,15 +562,108 @@ export default function IssuePage() {
                 <div className="flex justify-start">
                   <div className="max-w-[80%] rounded-lg p-4 bg-gradient-to-r from-[#292f36] to-[#f3c9a4]/5 border border-[#515b65] shadow-md">
                     <div className="prose prose-md3 max-w-none">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      <ReactMarkdown components={{
+                    code({ inline, className, children, ...props }: any) {
+                      const match = /language-(\w+)/.exec(className || "")
+                      const isInline = inline && !match // Treat as inline if explicitly inline and not a code block
+
+                      if (isInline) {
+                        // Render inline code without SyntaxHighlighter
+                        return <code className={className} {...props}>{children}</code>
+                      }
+
+                      return match ? (
+                        <SyntaxHighlighter
+                          style={tomorrow}
+                          language={match[1]}
+                          PreTag="div"
+                          {...props}
+                        >
+                          {String(children).replace(/\n$/, "")}
+                        </SyntaxHighlighter>
+                      ) : (
+                        <code className={className} {...props}>
+                          {children}
+                        </code>
+                      )
+                    },
+                    pre: ({ children }) => (
+                      <pre className="bg-[#16191d] border border-[#515b65] rounded-lg p-4 overflow-x-auto my-4">
+                        {children}
+                      </pre>
+                    ),
+                    h1: ({ children }) => (
+                      <h1 className="text-2xl font-bold mb-4 text-[#f3f3f3] border-b border-[#515b65] pb-2">
+                        {children}
+                      </h1>
+                    ),
+                    h2: ({ children }) => (
+                      <h2 className="text-xl font-semibold mb-3 text-[#f3f3f3] mt-6">{children}</h2>
+                    ),
+                    h3: ({ children }) => <h3 className="text-lg font-medium mb-2 text-[#f3f3f3] mt-4">{children}</h3>,
+                    h4: ({ children }) => (
+                      <h4 className="text-base font-medium mb-2 text-[#f3f3f3] mt-3">{children}</h4>
+                    ),
+                    h5: ({ children }) => <h5 className="text-sm font-medium mb-2 text-[#f3f3f3] mt-3">{children}</h5>,
+                    h6: ({ children }) => <h6 className="text-sm font-medium mb-2 text-[#f3f3f3] mt-3">{children}</h6>,
+                    p: ({ children }) => <p className="mb-4 leading-relaxed text-[#f3f3f3]">{children}</p>,
+                    ul: ({ children }) => (
+                      <ul className="list-disc list-inside mb-4 space-y-2 text-[#f3f3f3] ml-4">{children}</ul>
+                    ),
+                    ol: ({ children }) => (
+                      <ol className="list-decimal list-inside mb-4 space-y-2 text-[#f3f3f3] ml-4">{children}</ol>
+                    ),
+                    li: ({ children }) => <li className="text-[#f3f3f3]">{children}</li>,
+                    blockquote: ({ children }) => (
+                      <blockquote className="border-l-4 border-[#f3c9a4] pl-4 italic my-4 text-[#f3f3f3]/80 bg-[#f3c9a4]/5 py-2 rounded-r">
+                        {children}
+                      </blockquote>
+                    ),
+                    a: ({ href, children }) => (
+                      <a
+                        href={href}
+                        className="text-[#f3c9a4] hover:text-[#3ac8bd] underline transition-colors"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {children}
+                      </a>
+                    ),
+                    table: ({ children }) => (
+                      <div className="overflow-x-auto my-4">
+                        <table className="min-w-full border border-[#515b65] rounded-lg">{children}</table>
+                      </div>
+                    ),
+                    thead: ({ children }) => <thead className="bg-[#292f36]">{children}</thead>,
+                    tbody: ({ children }) => <tbody>{children}</tbody>,
+                    tr: ({ children }) => <tr className="border-b border-[#515b65]">{children}</tr>,
+                    th: ({ children }) => (
+                      <th className="border border-[#515b65] px-4 py-3 bg-[#292f36] font-semibold text-left text-[#f3f3f3]">
+                        {children}
+                      </th>
+                    ),
+                    td: ({ children }) => (
+                      <td className="border border-[#515b65] px-4 py-3 text-[#f3f3f3]">{children}</td>
+                    ),
+                    strong: ({ children }) => <strong className="font-bold text-[#f3c9a4]">{children}</strong>,
+                    em: ({ children }) => <em className="italic text-[#f3f3f3]/90">{children}</em>,
+                    hr: () => <hr className="border-[#515b65] my-6" />,
+                    img: ({ src, alt }) => (
+                      <img
+                        src={src || "/placeholder.svg"}
+                        alt={alt || ""}
+                        className="max-w-full h-auto rounded-lg border border-[#515b65] my-4"
+                      />
+                    ),
+                  }} remarkPlugins={[remarkGfm]}>
                         {`# Welcome to the AI Issue Assistant
 
-I can help you understand this issue and provide guidance. Here are some examples of what you can ask:
+I can help you understand this issue by searching through the codebase. Here are some examples of what you can ask:
 
-- How can I reproduce this bug?
-- What's the best approach to fix this?
-- Can you explain the technical concepts involved?
-- What are similar issues that have been solved before?
+- How is this feature implemented in the code?
+- Where are the relevant files for this issue?
+- Can you show me the code that handles this functionality?
+- What are the dependencies and imports needed for this feature?
 
 **Try asking a question to get started!**`}
                       </ReactMarkdown>

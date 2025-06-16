@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"ai-in-action/internal/service"
+	"github.com/ahmednasr/ai-in-action/server/internal/service"
 
 	"github.com/gofiber/fiber/v2"
 )

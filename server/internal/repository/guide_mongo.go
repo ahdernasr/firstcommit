@@ -3,7 +3,7 @@ package repository
 import (
 	"context"
 
-	"ai-in-action/internal/models"
+	"github.com/ahmednasr/ai-in-action/server/internal/models"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"

@@ -26,7 +26,7 @@ func (l *LocalEmbedder) Embed(text string) ([]float32, error) {
 import sys
 from sentence_transformers import SentenceTransformer
 
-model_name = 'all-mpnet-base-v2' if '%s' == 'metadata' else 'microsoft/codebert-base'
+model_name = 'all-mpnet-base-v2' if '%s' == 'metadata' else 'intfloat/multilingual-e5-large'
 print(f"DEBUG: Python script using model: {model_name}", file=sys.stderr)
 model = SentenceTransformer(model_name)
 embedding = model.encode('%s', normalize_embeddings=True)

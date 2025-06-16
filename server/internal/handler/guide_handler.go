@@ -1,9 +1,8 @@
 package handler
 
 import (
+	"github.com/ahmednasr/ai-in-action/server/internal/service"
 	"github.com/gofiber/fiber/v2"
-
-	"ai-in-action/internal/service"
 )
 
 // GuideHandler wires HTTP → GuideService.

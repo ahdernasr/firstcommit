@@ -15,6 +15,8 @@ import (
 type VertexEmbedder struct {
 	client    *aiplatform.PredictionClient
 	modelName string
+	projectID string
+	location  string
 }
 
 // GeminiEmbedder uses Google's gemini-embedding-001 model to generate embeddings
@@ -24,18 +26,14 @@ type GeminiEmbedder struct {
 }
 
 // NewVertexEmbedder creates a new embedder using the service account credentials
-func NewVertexEmbedder() (*VertexEmbedder, error) {
+func NewVertexEmbedder(projectID, location string) (*VertexEmbedder, error) {
 	ctx := context.Background()
-
-	// Initialize Vertex AI client
-	client, err := aiplatform.NewPredictionClient(ctx, option.WithCredentialsFile("server-key.json"))
+	client, err := aiplatform.NewPredictionClient(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create Vertex AI client: %w", err)
+		return nil, fmt.Errorf("failed to create prediction client: %w", err)
 	}
 
 	// Construct model name
-	projectID := os.Getenv("GCP_PROJECT_ID")
-	location := os.Getenv("GCP_LOCATION")
 	if location == "" {
 		location = "us-central1"
 	}
@@ -43,6 +41,8 @@ func NewVertexEmbedder() (*VertexEmbedder, error) {
 
 	return &VertexEmbedder{
 		client:    client,
+		projectID: projectID,
+		location:  location,
 		modelName: modelName,
 	}, nil
 }

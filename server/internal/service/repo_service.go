@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"ai-in-action/internal/github"
-	"ai-in-action/internal/models"
+	"github.com/ahmednasr/ai-in-action/server/internal/github"
+	"github.com/ahmednasr/ai-in-action/server/internal/models"
 )
 
 // ---- Return DTO ------------------------------------------------------------

@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"time"
 
-	"ai-in-action/internal/models"
+	"github.com/ahmednasr/ai-in-action/server/internal/models"
 )
 
 // Client is a minimal wrapper around GitHub's REST API v3.

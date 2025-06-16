@@ -5,11 +5,10 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/ahmednasr/ai-in-action/server/internal/models"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-
-	"ai-in-action/internal/models"
 )
 
 // RepoMongo implements the repository interface for MongoDB.
@@ -81,7 +80,7 @@ func NewRepoRepository(primaryDB, federatedDB *mongo.Database) (*RepoMongo, erro
 
 // FindByID retrieves a repository by its ID.
 func (r *RepoMongo) FindByID(ctx context.Context, id string) (*models.Repo, error) {
-	filter := bson.M{"full_name": id}
+	filter := bson.M{"full_name": "vuejs/" + id}
 	var repo models.Repo
 	err := r.federatedMetaColl.FindOne(ctx, filter).Decode(&repo)
 	if err != nil {

@@ -1,115 +1,141 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
 
-import { useState, useEffect } from "react"
-import { Search, Star, GitFork, Eye, Filter, ArrowDownUp, AlertCircle } from "lucide-react" // Added AlertCircle icon
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Skeleton } from "@/components/ui/skeleton"
-import Link from "next/link"
-import ReactMarkdown from "react-markdown"
-import remarkGfm from "remark-gfm"
+import { useState, useEffect } from "react";
+import {
+  Search,
+  Star,
+  GitFork,
+  Eye,
+  Filter,
+  ArrowDownUp,
+  AlertCircle,
+} from "lucide-react"; // Added AlertCircle icon
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import Link from "next/link";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface Repository {
-  _id: string // MongoDB _id
-  name: string
-  full_name: string
-  owner: string
-  html_url: string // Now consistently available
-  description?: string // Make optional as it might be null
-  language?: string // Renamed from languages for simplicity on card display, will pick first from array
-  stargazers_count: number // Updated to match backend field name
-  watchers_count: number
-  forks_count: number
-  open_issues_count: number
-  license?: string
-  homepage?: string
-  image_url: string // Directly from backend's Repo model
-  default_branch?: string
-  created_at: string
-  pushed_at: string
-  size: number
-  visibility: string
-  archived: boolean
-  allow_forking: boolean
-  is_template: boolean
-  topics?: string[] // Make optional
-  languages: string[] // Keep original languages array from backend
-  readme?: string // Add Readme field back to the interface
-  score: number
-  relevance_reason?: string
+  _id: string; // MongoDB _id
+  name: string;
+  full_name: string;
+  owner: string;
+  html_url: string; // Now consistently available
+  description?: string; // Make optional as it might be null
+  language?: string; // Renamed from languages for simplicity on card display, will pick first from array
+  stargazers_count: number; // Updated to match backend field name
+  watchers_count: number;
+  forks_count: number;
+  open_issues_count: number;
+  license?: string;
+  homepage?: string;
+  image_url: string; // Directly from backend's Repo model
+  default_branch?: string;
+  created_at: string;
+  pushed_at: string;
+  size: number;
+  visibility: string;
+  archived: boolean;
+  allow_forking: boolean;
+  is_template: boolean;
+  topics?: string[]; // Make optional
+  languages: string[]; // Keep original languages array from backend
+  readme?: string; // Add Readme field back to the interface
+  score: number;
+  relevance_reason?: string;
 }
 
 export default function HomePage() {
-  const [searchQuery, setSearchQuery] = useState("")
-  const [repositories, setRepositories] = useState<Repository[]>([])
-  const [loading, setLoading] = useState(false)
-  const [sortBy, setSortBy] = useState("stars") // Corresponds to selectedSort
-  const [language, setLanguage] = useState("all") // Corresponds to selectedLanguage
-  const [selectedTopic, setSelectedTopic] = useState("all") // New state for topic filter
+  const [searchQuery, setSearchQuery] = useState("");
+  const [repositories, setRepositories] = useState<Repository[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [sortBy, setSortBy] = useState("stars"); // Corresponds to selectedSort
+  const [language, setLanguage] = useState("all"); // Corresponds to selectedLanguage
+  const [selectedTopic, setSelectedTopic] = useState("all"); // New state for topic filter
 
-  const [showExamples, setShowExamples] = useState(false) // Changed to false to prevent showing example repos initially
+  const [showExamples, setShowExamples] = useState(false); // Changed to false to prevent showing example repos initially
 
   const searchRepositories = async () => {
-    setShowExamples(false)
-    setLoading(true)
+    setShowExamples(false);
+    setLoading(true);
     try {
-      const response = await fetch(`http://localhost:8080/api/v1/search?q=${encodeURIComponent(searchQuery)}`)
+      const response = await fetch(
+        `http://localhost:8080/api/v1/search?q=${encodeURIComponent(
+          searchQuery
+        )}`
+      );
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
-      const data = await response.json()
-      console.log("Search Repositories Data:", data)
-      setRepositories(data || [])
+      const data = await response.json();
+      console.log("Search Repositories Data:", data);
+      setRepositories(data || []);
     } catch (error) {
-      console.error("Error searching repositories:", error)
-      setRepositories([])
+      console.error("Error searching repositories:", error);
+      setRepositories([]);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const fetchInitialRepositories = async () => {
-    setLoading(true)
+    setLoading(true);
     try {
       // Fetch some initial data (e.g., top 100 repositories based on stars)
       // This can be adjusted based on how you want to populate the homepage initially
-      const response = await fetch(`http://localhost:8080/api/v1/search?q=stars:>100`)
+      const response = await fetch(
+        `http://localhost:8080/api/v1/search?q=stars:>100`
+      );
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
-      const data = await response.json()
-      console.log("Initial Repositories Data:", data)
-      setRepositories(data || [])
+      const data = await response.json();
+      console.log("Initial Repositories Data:", data);
+      setRepositories(data || []);
     } catch (error) {
-      console.error("Error fetching initial repositories:", error)
-      setRepositories([])
+      console.error("Error fetching initial repositories:", error);
+      setRepositories([]);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault()
-    searchRepositories()
-  }
+    e.preventDefault();
+    searchRepositories();
+  };
 
   useEffect(() => {
     // Only trigger search if a query is active
     if (searchQuery.trim()) {
       const debounceTimer = setTimeout(() => {
-        searchRepositories()
-      }, 500)
-      return () => clearTimeout(debounceTimer)
+        searchRepositories();
+      }, 500);
+      return () => clearTimeout(debounceTimer);
     } else {
       // Fetch initial repositories if no search query is active
-      fetchInitialRepositories()
+      fetchInitialRepositories();
     }
-  }, [sortBy, language, selectedTopic, searchQuery])
+  }, [sortBy, language, selectedTopic, searchQuery]);
 
   return (
     <div className="min-h-screen bg-[#16191d]">
@@ -119,7 +145,8 @@ export default function HomePage() {
             GitHub Repository Explorer
           </h1>
           <p className="text-[#f3f3f3]/80 text-xl max-w-2xl mx-auto leading-relaxed">
-            Discover and explore open source repositories with AI-powered issue guidance
+            Discover and explore open source repositories with AI-powered issue
+            guidance
           </p>
         </div>
 
@@ -148,7 +175,8 @@ export default function HomePage() {
               {/* Filter by Language */}
               <Select value={language} onValueChange={setLanguage}>
                 <SelectTrigger className="w-full md:w-[180px] h-12 bg-[#292f36] border-[#515b65] rounded-lg text-[#f3f3f3] flex items-center gap-2 pl-4">
-                  <Filter className="h-5 w-5 text-[#515b65]" /> {/* Changed icon color */}
+                  <Filter className="h-5 w-5 text-[#515b65]" />{" "}
+                  {/* Changed icon color */}
                   <SelectValue placeholder="Language" />
                 </SelectTrigger>
                 <SelectContent className="bg-[#292f36] border-[#515b65] rounded-lg shadow-lg">
@@ -206,7 +234,8 @@ export default function HomePage() {
               {/* Filter by Topic */}
               <Select value={selectedTopic} onValueChange={setSelectedTopic}>
                 <SelectTrigger className="w-full md:w-[180px] h-12 bg-[#292f36] border-[#515b65] rounded-lg text-[#f3f3f3] flex items-center gap-2 pl-4">
-                  <Filter className="h-5 w-5 text-[#515b65]" /> {/* Changed icon color */}
+                  <Filter className="h-5 w-5 text-[#515b65]" />{" "}
+                  {/* Changed icon color */}
                   <SelectValue placeholder="Topic" />
                 </SelectTrigger>
                 <SelectContent className="bg-[#292f36] border-[#515b65] rounded-lg shadow-lg">
@@ -252,7 +281,8 @@ export default function HomePage() {
               {/* Sort By */}
               <Select value={sortBy} onValueChange={setSortBy}>
                 <SelectTrigger className="w-full md:w-[180px] h-12 bg-[#292f36] border-[#515b65] rounded-lg text-[#f3f3f3] flex items-center gap-2 pl-4">
-                  <ArrowDownUp className="h-5 w-5 text-[#515b65]" /> {/* Changed icon color */}
+                  <ArrowDownUp className="h-5 w-5 text-[#515b65]" />{" "}
+                  {/* Changed icon color */}
                   <SelectValue placeholder="Sort by" />
                 </SelectTrigger>
                 <SelectContent className="bg-[#292f36] border-[#515b65] rounded-lg shadow-lg">
@@ -285,7 +315,10 @@ export default function HomePage() {
           {loading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {Array.from({ length: 6 }).map((_, i) => (
-                <Card key={i} className="bg-[#292f36] border-[#515b65] rounded-lg shadow-md">
+                <Card
+                  key={i}
+                  className="bg-[#292f36] border-[#515b65] rounded-lg shadow-md"
+                >
                   <CardHeader className="p-6">
                     <Skeleton className="h-6 w-3/4 bg-[#515b65] rounded" />
                     <Skeleton className="h-4 w-full bg-[#515b65] rounded" />
@@ -319,30 +352,42 @@ export default function HomePage() {
                             alt={repo.owner}
                             className="w-8 h-8 rounded-full"
                           />
-                          <span className="text-sm text-[#f3f3f3]/70 font-medium">{repo.owner}</span>
+                          <span className="text-sm text-[#f3f3f3]/70 font-medium">
+                            {repo.owner}
+                          </span>
                         </div>
-                        <CardTitle className="text-xl text-[#f3f3f3] font-semibold">{repo.name}</CardTitle>
-                        <CardDescription className="line-clamp-2 text-[#f3f3f3]/60 leading-relaxed">
+                        <CardTitle className="text-xl text-[#f3f3f3] font-semibold">
+                          {repo.name}
+                        </CardTitle>
+                        <CardDescription className="line-clamp-2 min-h-[3rem] text-[#f3f3f3]/60 leading-relaxed">
                           {repo.description || "No description available"}
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="p-6 pt-0 space-y-4">
                         <div className="flex flex-wrap gap-4 items-center">
-                          <div className="flex items-center gap-2 text-[#f3f3f3]/80">
+                          <div className="flex items-center gap-2 text-[#f3f3f3]/80 text-xs">
                             <Star className="h-4 w-4 text-[#f1e05a]" />
-                            <span className="font-medium">{repo.stargazers_count.toLocaleString()} stars</span>
+                            <span className="font-medium">
+                              {repo.stargazers_count.toLocaleString()} stars
+                            </span>
                           </div>
-                          <div className="flex items-center gap-2 text-[#f3f3f3]/80">
+                          <div className="flex items-center gap-2 text-[#f3f3f3]/80 text-xs">
                             <GitFork className="h-4 w-4" />
-                            <span className="font-medium">{repo.forks_count.toLocaleString()} forks</span>
+                            <span className="font-medium">
+                              {repo.forks_count.toLocaleString()} forks
+                            </span>
                           </div>
-                          <div className="flex items-center gap-2 text-[#f3f3f3]/80">
+                          <div className="flex items-center gap-2 text-[#f3f3f3]/80 text-xs">
                             <Eye className="h-4 w-4" />
-                            <span className="font-medium">{repo.watchers_count.toLocaleString()} watching</span>
+                            <span className="font-medium">
+                              {repo.watchers_count.toLocaleString()} watching
+                            </span>
                           </div>
-                          <div className="flex items-center gap-2 text-[#f3f3f3]/80">
+                          <div className="flex items-center gap-2 text-[#f3f3f3]/80 text-xs">
                             <AlertCircle className="h-4 w-4" />
-                            <span className="font-medium">{repo.open_issues_count} open issues</span>
+                            <span className="font-medium">
+                              {repo.open_issues_count} open issues
+                            </span>
                           </div>
                           {repo.language && (
                             <Badge
@@ -352,18 +397,25 @@ export default function HomePage() {
                               {repo.language}
                             </Badge>
                           )}
-                          {repo.topics && repo.topics.slice(0, 2).map((topic) => (
-                            <Badge
-                              key={topic}
-                              variant="outline"
-                              className="border-[#515b65] text-[#f3f3f3]/70 px-3 py-1 rounded-md hover:border-[#f3c9a4]/50 hover:text-[#f3c9a4] transition-colors duration-200"
-                            >
-                              {topic}
-                            </Badge>
-                          ))}
                         </div>
+
+                        {repo.topics && repo.topics.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {repo.topics.slice(0, 2).map((topic) => (
+                              <Badge
+                                key={topic}
+                                variant="outline"
+                                className="border-[#515b65] text-[#f3f3f3]/70 px-3 py-1 rounded-md hover:border-[#f3c9a4]/50 hover:text-[#f3c9a4] transition-colors duration-200"
+                              >
+                                {topic}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+
                         <p className="text-xs text-[#f3f3f3]/50 font-medium">
-                          Updated {new Date(repo.pushed_at).toLocaleDateString()}
+                          Updated{" "}
+                          {new Date(repo.pushed_at).toLocaleDateString()}
                         </p>
                       </CardContent>
                     </Card>
@@ -373,14 +425,16 @@ export default function HomePage() {
             </div>
           ) : searchQuery && !loading ? (
             <div className="text-center py-16">
-              <p className="text-[#f3f3f3]/70 text-lg mb-6">No repositories found for "{searchQuery}"</p>
+              <p className="text-[#f3f3f3]/70 text-lg mb-6">
+                No repositories found for "{searchQuery}"
+              </p>
               <Button
                 variant="outline"
                 className="bg-transparent border border-[#f3c9a4] text-[#f3c9a4] hover:bg-[#f3c9a4]/10 active:bg-[#f3c9a4]/20 rounded-lg px-6 py-3 font-medium transition-all duration-200"
                 onClick={() => {
-                  setSearchQuery("")
-                  setRepositories([])
-                  setShowExamples(true)
+                  setSearchQuery("");
+                  setRepositories([]);
+                  setShowExamples(true);
                 }}
               >
                 View Examples
@@ -388,11 +442,13 @@ export default function HomePage() {
             </div>
           ) : (
             <div className="text-center py-16">
-              <p className="text-[#f3f3f3]/70 text-lg">Search for repositories to get started</p>
+              <p className="text-[#f3f3f3]/70 text-lg">
+                Search for repositories to get started
+              </p>
             </div>
           )}
         </div>
       </div>
     </div>
-  )
+  );
 }

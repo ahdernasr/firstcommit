@@ -3,17 +3,17 @@ package main
 import (
 	"log"
 
+	"github.com/ahmednasr/ai-in-action/server/internal/config"
+	"github.com/ahmednasr/ai-in-action/server/internal/database"
+	"github.com/ahmednasr/ai-in-action/server/internal/github"
+	"github.com/ahmednasr/ai-in-action/server/internal/handler"
+	"github.com/ahmednasr/ai-in-action/server/internal/repository"
+	"github.com/ahmednasr/ai-in-action/server/internal/service"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/gofiber/fiber/v2/middleware/recover"
 	"go.mongodb.org/mongo-driver/bson"
-
-	"ai-in-action/internal/config"
-	"ai-in-action/internal/database"
-	"ai-in-action/internal/github"
-	"ai-in-action/internal/handler"
-	"ai-in-action/internal/middleware"
-	"ai-in-action/internal/repository"
-	"ai-in-action/internal/service"
 )
 
 // main is the single entry‑point for the REST API.
@@ -85,8 +85,23 @@ func main() {
 	// Initialize services
 	searchSvc := service.NewSearchService(repoRepo, metadataEmbedder)
 	repoSvc := service.NewRepoService(repoRepo, ghClient)
-	guideSvc := service.NewGuideService(guideRepo, ghClient, repoRepo, metadataEmbedder, service.NewDummyLLM())
+
+	// Initialize Vertex AI LLM
+	llm, err := service.NewVertexLLM()
+	if err != nil {
+		log.Fatalf("Failed to initialize Vertex AI LLM: %v", err)
+	}
+	defer llm.Close()
+
+	guideSvc := service.NewGuideService(guideRepo, ghClient, repoRepo, metadataEmbedder, llm)
 	chatSvc := service.NewChatService(guideSvc)
+
+	// Use code embedder for RAG service
+	ragService := service.NewRAGService(mainDB.Collection("repos_code"), mainDB.Collection("repos_meta"), codeEmbedder, llm)
+
+	// Initialize handlers
+	healthHandler := handler.NewHealthHandler(mainClient, federatedClient)
+	ragHandler := handler.NewRAGHandler(ragService)
 
 	// Create Fiber app
 	app := fiber.New(fiber.Config{
@@ -95,19 +110,14 @@ func main() {
 	})
 
 	// Add middleware
-	app.Use(middleware.Logging())
-	app.Use(cors.New(cors.Config{
-		AllowOrigins: "*", // Allow all origins for development
-		AllowHeaders: "Origin, Content-Type, Accept",
-		AllowMethods: "GET, POST, PUT, DELETE, OPTIONS",
-	}))
+	app.Use(cors.New())
+	app.Use(logger.New())
+	app.Use(recover.New())
 
 	// Register routes
 	handler.RegisterRoutes(app, searchSvc, repoSvc, guideSvc, chatSvc, repoRepo, metadataEmbedder, codeEmbedder)
-
-	// Add health check
-	healthHandler := handler.NewHealthHandler(mainClient, federatedClient)
 	healthHandler.Register(app)
+	ragHandler.RegisterRoutes(app)
 
 	// Start server
 	log.Printf("Server starting on port %s", cfg.Port)

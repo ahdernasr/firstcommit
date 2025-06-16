@@ -29,6 +29,10 @@ type Config struct {
 	// Server tuning
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
+
+	// ProjectID and Location
+	ProjectID string
+	Location  string
 }
 
 // Load parses the environment (and an optional .env file) into Config.
@@ -38,11 +42,13 @@ func Load() Config {
 	_ = godotenv.Load()
 
 	return Config{
-		Port:              getEnv("PORT", "8080"),
+		Port:              must("PORT"),
 		MongoURI:          must("MONGODB_URI"),
 		FederatedMongoURI: must("FEDERATED_MONGODB_URI"),
 		DBName:            getEnv("MONGODB_DB", "ai_action"),
 		GitHubToken:       must("GITHUB_TOKEN"),
+		ProjectID:         must("GCP_PROJECT_ID"),
+		Location:          must("GCP_LOCATION"),
 		ReadTimeout:       getDuration("READ_TIMEOUT_SEC", 5),
 		WriteTimeout:      getDuration("WRITE_TIMEOUT_SEC", 10),
 	}
