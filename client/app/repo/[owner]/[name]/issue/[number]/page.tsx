@@ -65,6 +65,8 @@ export default function IssuePage() {
   const [commentsLoading, setCommentsLoading] = useState(false)
   const [displayedContent, setDisplayedContent] = useState<{ [key: string]: string }>({})
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
+  const [guide, setGuide] = useState<string>("")
+  const [guideLoading, setGuideLoading] = useState(true)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -116,6 +118,41 @@ export default function IssuePage() {
       setCommentsLoading(false)
     }
   }
+
+  // Fetch guide when issue loads
+  useEffect(() => {
+    const fetchGuide = async () => {
+      if (!issue) return
+      
+      setGuideLoading(true)
+      try {
+        const response = await fetch("http://localhost:8080/api/v1/guide", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            query: issue.title + "\n\n" + issue.body,
+            repo_id: `${params.owner}/${params.name}`,
+          }),
+        })
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+
+        const data = await response.json()
+        setGuide(data.guide || "")
+      } catch (error) {
+        console.error("Error fetching guide:", error)
+        setGuide("Failed to generate guide. Please try again later.")
+      } finally {
+        setGuideLoading(false)
+      }
+    }
+
+    fetchGuide()
+  }, [issue, params.owner, params.name])
 
   // Typing-effect: reveal one character at a time (much faster: 5ms)
   useEffect(() => {
@@ -515,6 +552,110 @@ export default function IssuePage() {
               </div>
             </CardContent>
           )}
+        </Card>
+
+        <Separator className="mb-12 bg-[#515b65]" />
+
+        {/* Guide Section */}
+        <Card className="mb-12 bg-[#292f36] border-[#515b65] rounded-lg shadow-lg">
+          <CardHeader className="p-6">
+            <CardTitle className="flex items-center gap-2 text-xl">
+              <div className="relative h-6 w-6">
+                <div
+                  className="absolute inset-0 h-6 w-6"
+                  style={{
+                    background: "linear-gradient(-45deg, #f3c9a4, #3ac8bd, #f3c9a4, #3ac8bd)",
+                    backgroundSize: "400% 400%",
+                    animation: "gradient-x 6s ease infinite",
+                    WebkitMask: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'%3E%3Cpath d='M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z'/%3E%3Cpath d='M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z'/%3E%3C/svg%3E\") center/contain no-repeat",
+                    mask: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'%3E%3Cpath d='M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z'/%3E%3Cpath d='M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z'/%3E%3C/svg%3E\") center/contain no-repeat",
+                  }}
+                />
+              </div>
+              <span className="bg-gradient-to-r from-[#f3c9a4] to-[#3ac8bd] bg-clip-text text-transparent bg-size-200 animate-gradient-x font-semibold">
+                First-Time Contributor Guide
+              </span>
+            </CardTitle>
+            <CardDescription className="text-[#f3f3f3]/60">
+              A beginner-friendly guide to help you understand and contribute to this issue
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-6">
+            {guideLoading ? (
+              <div className="space-y-4">
+                <Skeleton className="h-4 w-3/4 bg-[#515b65]" />
+                <Skeleton className="h-4 w-full bg-[#515b65]" />
+                <Skeleton className="h-4 w-5/6 bg-[#515b65]" />
+                <Skeleton className="h-4 w-4/6 bg-[#515b65]" />
+                <Skeleton className="h-4 w-3/4 bg-[#515b65]" />
+              </div>
+            ) : (
+              <div className="prose prose-md3 max-w-none">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    code({ inline, className, children, ...props }: any) {
+                      const match = /language-(\w+)/.exec(className || "")
+                      const isInline = inline && !match
+
+                      if (isInline) {
+                        return <code className={className} {...props}>{children}</code>
+                      }
+
+                      return match ? (
+                        <SyntaxHighlighter
+                          style={tomorrow}
+                          language={match[1]}
+                          PreTag="div"
+                          {...props}
+                        >
+                          {String(children).replace(/\n$/, "")}
+                        </SyntaxHighlighter>
+                      ) : (
+                        <code className={className} {...props}>
+                          {children}
+                        </code>
+                      )
+                    },
+                    h1: ({ children }) => (
+                      <h1 className="text-2xl font-bold mb-4 text-[#f3f3f3] border-b border-[#515b65] pb-2">
+                        {children}
+                      </h1>
+                    ),
+                    h2: ({ children }) => (
+                      <h2 className="text-xl font-semibold mb-3 text-[#f3f3f3] mt-6">{children}</h2>
+                    ),
+                    h3: ({ children }) => <h3 className="text-lg font-medium mb-2 text-[#f3f3f3] mt-4">{children}</h3>,
+                    p: ({ children }) => <p className="mb-4 leading-relaxed text-[#f3f3f3]">{children}</p>,
+                    ul: ({ children }) => (
+                      <ul className="list-disc list-inside mb-4 space-y-2 text-[#f3f3f3] ml-4">{children}</ul>
+                    ),
+                    ol: ({ children }) => (
+                      <ol className="list-decimal list-inside mb-4 space-y-2 text-[#f3f3f3] ml-4">{children}</ol>
+                    ),
+                    li: ({ children }) => <li className="text-[#f3f3f3]">{children}</li>,
+                    blockquote: ({ children }) => (
+                      <blockquote className="border-l-4 border-[#f3c9a4] pl-4 italic my-4 text-[#f3f3f3]/80 bg-[#f3c9a4]/5 py-2 rounded-r">
+                        {children}
+                      </blockquote>
+                    ),
+                    a: ({ href, children }) => (
+                      <a
+                        href={href}
+                        className="text-[#f3c9a4] hover:text-[#3ac8bd] underline transition-colors"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {children}
+                      </a>
+                    ),
+                  }}
+                >
+                  {guide}
+                </ReactMarkdown>
+              </div>
+            )}
+          </CardContent>
         </Card>
 
         <Separator className="mb-12 bg-[#515b65]" />

@@ -131,6 +131,7 @@ func (r *RepoMongo) VectorSearch(ctx context.Context, queryVector []float32, k i
 			sampleDoc.ID, len(sampleDoc.Embedding))
 	}
 
+	// Enhanced pipeline with hybrid search capabilities
 	pipeline := mongo.Pipeline{
 		{
 			{"$vectorSearch", bson.M{
@@ -140,16 +141,35 @@ func (r *RepoMongo) VectorSearch(ctx context.Context, queryVector []float32, k i
 				"numCandidates": k * 10,
 				"limit":         k,
 				"similarity":    "cosine",
+				// Add filter for active repositories
+				"filter": bson.M{
+					"archived":   false,
+					"visibility": "public",
+				},
 			}},
 		},
 		{
 			{"$project", bson.M{
-				"_id":   1, // Project only _id
-				"score": bson.M{"$meta": "vectorSearchScore"},
+				"_id":              1,
+				"name":             1,
+				"description":      1,
+				"stargazers_count": 1,
+				"forks_count":      1,
+				"topics":           1,
+				"languages":        1,
+				"score":            bson.M{"$meta": "vectorSearchScore"},
+				// Add relevance score calculation
+				"relevance_score": bson.M{
+					"$add": []interface{}{
+						bson.M{"$multiply": []interface{}{bson.M{"$meta": "vectorSearchScore"}, 0.7}},
+						bson.M{"$multiply": []interface{}{bson.M{"$divide": []interface{}{"$stargazers_count", 1000}}, 0.2}},
+						bson.M{"$multiply": []interface{}{bson.M{"$divide": []interface{}{"$forks_count", 100}}, 0.1}},
+					},
+				},
 			}},
 		},
 		{
-			{"$sort", bson.M{"score": -1}},
+			{"$sort", bson.M{"relevance_score": -1}},
 		},
 	}
 
@@ -161,8 +181,15 @@ func (r *RepoMongo) VectorSearch(ctx context.Context, queryVector []float32, k i
 	defer cursor.Close(ctx)
 
 	var results []struct {
-		ID    string  `bson:"_id"` // Decode _id
-		Score float64 `bson:"score"`
+		ID              string   `bson:"_id"`
+		Name            string   `bson:"name"`
+		Description     string   `bson:"description"`
+		StargazersCount int      `bson:"stargazers_count"`
+		ForksCount      int      `bson:"forks_count"`
+		Topics          []string `bson:"topics"`
+		Languages       []string `bson:"languages"`
+		Score           float64  `bson:"score"`
+		RelevanceScore  float64  `bson:"relevance_score"`
 	}
 	if err := cursor.All(ctx, &results); err != nil {
 		return nil, fmt.Errorf("vector search failed: failed to decode results: %w", err)
@@ -170,8 +197,8 @@ func (r *RepoMongo) VectorSearch(ctx context.Context, queryVector []float32, k i
 
 	log.Printf("Vector search returned %d initial results", len(results))
 	if len(results) > 0 {
-		log.Printf("First result: ID (Full Name)=%s, Score=%f",
-			results[0].ID, results[0].Score)
+		log.Printf("First result: ID (Full Name)=%s, Score=%f, Relevance Score=%f",
+			results[0].ID, results[0].Score, results[0].RelevanceScore)
 	}
 
 	// Now, for each result, fetch the full repository metadata from federated DB
@@ -186,7 +213,7 @@ func (r *RepoMongo) VectorSearch(ctx context.Context, queryVector []float32, k i
 			continue // Skip if full metadata not found
 		}
 		log.Printf("Found metadata for repo: %s (full_name: %s)", fullRepo.Name, fullRepo.FullName)
-		fullRepo.Score = result.Score // Preserve the score from vector search
+		fullRepo.Score = result.RelevanceScore // Use the enhanced relevance score
 		enrichedResults = append(enrichedResults, *fullRepo)
 	}
 

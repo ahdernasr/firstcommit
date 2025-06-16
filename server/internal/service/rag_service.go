@@ -40,6 +40,7 @@ type RAGResponse struct {
 	Answer     string   `json:"answer"`
 	Sources    []Source `json:"sources"`
 	Confidence float64  `json:"confidence"`
+	Guide      string   `json:"guide,omitempty"`
 }
 
 type Source struct {
@@ -150,6 +151,104 @@ Please provide a comprehensive guide that addresses the issue.`,
 		Answer:     answer,
 		Sources:    sources,
 		Confidence: results[0].Score,
+	}, nil
+}
+
+func (s *RAGService) GenerateGuide(ctx context.Context, req RAGRequest) (*RAGResponse, error) {
+	// Just reuse the existing RAG functionality with a different prompt
+	resp, err := s.GenerateResponse(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate guide: %w", err)
+	}
+
+	// Update the prompt to generate a guide
+	guidePrompt := fmt.Sprintf(`
+
+	You are generating a first-time contributor guide for a GitHub issue using retrieval-augmented context. You will be given:
+	•	A GitHub issue describing a bug or feature request.
+	•	A list of relevant files extracted from the codebase.
+
+Write a clear, actionable, and beginner-friendly guide to help a developer contribute confidently—even if its their first time in the repo.
+
+The guide should follow this structure:
+
+⸻
+
+Goal
+Summarize the issue:
+	•	What is the task (bug fix or feature)?
+	•	Why does it matter to the project or users?
+
+⸻
+
+Files to Review
+For each file provided:
+	•	Explain what the file does in the context of the project.
+	•	Describe how it relates to the issue or implementation.
+	•	Mention important functions, components, or logic that the contributor should look at.
+
+⸻
+
+How to Fix or Implement It
+Provide a step-by-step plan:
+	•	Outline where and how to make the necessary changes.
+	•	Reference specific functions or file sections where edits should occur.
+	•	Assume beginner-level familiarity with the codebase.
+	•	Be clear and precise.
+	•	Use bullet points or numbered steps when appropriate.
+
+⸻
+
+How to Test It
+Explain how to test the fix or feature:
+	•	Mention relevant commands (e.g., npm run build, yarn test).
+	•	If manual testing is needed, describe how to reproduce the bug or verify the new feature works as intended.
+	•	Optionally mention any existing tests or testing folders if relevant.
+
+⸻
+
+Comments
+If you know anything about the issue or the codebase, you can add quick comments to the guide.
+
+⸻
+
+Output Guidelines:
+	•	Output should be in Markdown format.
+	•	Total length should be 400–500 words.
+	•	Do not greet the user.
+	•	Avoid a conversational tone.
+	•	Do not include instructions about submitting pull requests.
+	•	Prioritize clarity, relevance, and a confidence-building tone.
+	•	Do not use emojis.
+
+Formatting Guidelines:
+	•	Use level 2 headers (##) for top-level sections like ## Goal, ## Files to Review, etc.
+	•	Use level 3 headers (###) for optional sub-sections.
+	•	Use bullet points or numbered steps where appropriate.
+	•	Use fenced code blocks (triple backticks) for code snippets.
+	•	Use Markdown block quotes (>) for file paths.
+	•	Use bold for important words.
+	
+
+GitHub Issue: %s
+
+Relevant Files:
+%s
+
+Write a guide that helps a junior developer contribute confidently without prior repo experience.`,
+		req.Query,
+		formatSources(resp.Sources))
+
+	guide, err := s.llm.GenerateResponse(ctx, guidePrompt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate guide: %w", err)
+	}
+
+	return &RAGResponse{
+		Answer:     resp.Answer,
+		Sources:    resp.Sources,
+		Confidence: resp.Confidence,
+		Guide:      guide,
 	}, nil
 }
 

@@ -20,6 +20,7 @@ func NewRAGHandler(ragService *service.RAGService) *RAGHandler {
 
 func (h *RAGHandler) RegisterRoutes(app *fiber.App) {
 	app.Post("/api/v1/rag", h.HandleRAG)
+	app.Post("/api/v1/guide", h.GenerateGuide)
 }
 
 func (h *RAGHandler) HandleRAG(c *fiber.Ctx) error {
@@ -43,5 +44,29 @@ func (h *RAGHandler) HandleRAG(c *fiber.Ctx) error {
 	}
 
 	log.Printf("Generated response: %+v", resp)
+	return c.JSON(resp)
+}
+
+func (h *RAGHandler) GenerateGuide(c *fiber.Ctx) error {
+	var req service.RAGRequest
+	if err := c.BodyParser(&req); err != nil {
+		log.Printf("Failed to parse request body: %v", err)
+		return fiber.NewError(fiber.StatusBadRequest, "Invalid request body")
+	}
+
+	log.Printf("Received guide request: %+v", req)
+
+	if req.Query == "" {
+		log.Printf("Empty query received")
+		return fiber.NewError(fiber.StatusBadRequest, "Query cannot be empty")
+	}
+
+	resp, err := h.ragService.GenerateGuide(c.Context(), req)
+	if err != nil {
+		log.Printf("Error generating guide: %v", err)
+		return fiber.NewError(fiber.StatusInternalServerError, fmt.Sprintf("Error generating guide: %v", err))
+	}
+
+	log.Printf("Generated guide: %+v", resp)
 	return c.JSON(resp)
 }
