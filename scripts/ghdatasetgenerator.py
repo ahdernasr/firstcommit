@@ -104,7 +104,7 @@ BLACKLIST_REPOS = {
 BLACKLIST_REPOS_LOWER = {r.lower() for r in BLACKLIST_REPOS}
 GOOD_LICENSES = {"MIT","Apache-2.0","BSD-3-Clause","GPL-3.0","LGPL-3.0"}
 
-DEFAULT_DESIRED = int(os.getenv("DESIRED_REPOS", "5"))
+DEFAULT_DESIRED = int(os.getenv("DESIRED_REPOS", "75"))
 
 def should_include(repo):
     # Basic filters
@@ -137,7 +137,7 @@ def should_include(repo):
 
 def clone_and_save(repo):
     name = repo["name"]
-    repo_dir = OUT_DIR / name
+    repo_dir = OUT_DIR / repo["full_name"].replace("/", "--")
     meta_path = repo_dir / "metadata.json"
     if repo_dir.exists() and meta_path.exists():
         return json.loads(meta_path.read_text())
@@ -277,7 +277,7 @@ def main(desired: int):
     selected = selected[:desired]
     # Cleanup
     for d in OUT_DIR.iterdir():
-        if d.is_dir() and d.name not in {m["name"] for m in selected}:
+        if d.is_dir() and d.name not in {m["full_name"].replace("/", "--") for m in selected}:
             log.info("Removing obsolete repo directory %s…", d)
             shutil.rmtree(d, ignore_errors=True)
     # Write repos.json as a proper JSON array
@@ -326,6 +326,7 @@ def main(desired: int):
                 continue
             local_path = os.path.join(root, fname)
             rel_path   = os.path.relpath(local_path, OUT_DIR)
+            rel_path = rel_path.replace(os.sep, "/")
             code_dest  = f"input/repos/{rel_path}"
             tasks.append((local_path, code_dest))
     def upload_task(args):
