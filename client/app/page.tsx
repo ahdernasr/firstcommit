@@ -33,6 +33,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { getApiEndpoint } from '@/lib/config'
 
 interface Repository {
   _id: string; // MongoDB _id
@@ -78,44 +79,68 @@ export default function HomePage() {
     setShowExamples(false);
     setLoading(true);
     try {
-      const response = await fetch(
-        `http://localhost:8080/api/v1/search?q=${encodeURIComponent(
-          searchQuery
-        )}`
-      );
+      const fullUrl = getApiEndpoint(`/api/v1/search?q=${encodeURIComponent(searchQuery)}`)
+      console.log('Searching with URL:', fullUrl)
+      
+      const response = await fetch(fullUrl, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      })
+
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text()
+        console.error('Search API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorText
+        })
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`)
       }
-      const data = await response.json();
-      console.log("Search Repositories Data:", data);
-      setRepositories(data || []);
+
+      const data = await response.json()
+      console.log('Search API response:', data)
+      setRepositories(data.repositories || [])
+      console.log('Set repositories:', data.repositories || [])
     } catch (error) {
-      console.error("Error searching repositories:", error);
-      setRepositories([]);
+      console.error("Error searching repositories:", error)
+      setRepositories([])
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
   };
 
   const fetchInitialRepositories = async () => {
     setLoading(true);
     try {
-      // Fetch some initial data (e.g., top 100 repositories based on stars)
-      // This can be adjusted based on how you want to populate the homepage initially
-      const response = await fetch(
-        `http://localhost:8080/api/v1/search?q=stars:>100`
-      );
+      const fullUrl = getApiEndpoint('/api/v1/search?q=stars:>100')
+      console.log('Fetching initial repos from:', fullUrl)
+      
+      const response = await fetch(fullUrl, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      })
+
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text()
+        console.error('Initial load API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorText
+        })
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`)
       }
-      const data = await response.json();
-      console.log("Initial Repositories Data:", data);
-      setRepositories(data || []);
+
+      const data = await response.json()
+      setRepositories(data.repositories || [])
     } catch (error) {
-      console.error("Error fetching initial repositories:", error);
-      setRepositories([]);
+      console.error("Error fetching initial repositories:", error)
+      setRepositories([])
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
   };
 

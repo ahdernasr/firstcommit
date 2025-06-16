@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator"
 import Link from "next/link"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm" // Corrected import path
+import { getApiEndpoint } from '@/lib/config'
 
 interface Repository {
   id: number
@@ -59,6 +60,14 @@ interface Issue {
   comments: number
 }
 
+// Helper function to get API URL
+const getApiUrl = () => {
+  // Hardcode the backend URL for now
+  const apiUrl = 'https://backend-222198140851.us-central1.run.app'
+  console.log('Using API URL:', apiUrl)
+  return apiUrl
+}
+
 export default function RepoPage() {
   const params = useParams()
   const [repository, setRepository] = useState<Repository | null>(null)
@@ -70,6 +79,7 @@ export default function RepoPage() {
   const [selectedIssueState, setSelectedIssueState] = useState<"open" | "closed">("open")
   const [selectedIssueLabel, setSelectedIssueLabel] = useState<string>("all")
   const [selectedSort, setSelectedSort] = useState<"created" | "updated" | "comments">("created")
+  const [error, setError] = useState<string | null>(null)
 
   const fetchIssues = async (issueState: "open" | "closed", issueLabel: string, sortBy: string) => {
     setIssuesLoading(true)
@@ -96,23 +106,41 @@ export default function RepoPage() {
     }
   }
 
-  useEffect(() => {
-    const fetchRepository = async () => {
+  const fetchData = async () => {
+    setLoading(true)
       try {
-        const response = await fetch(`https://api.github.com/repos/${params.owner}/${params.name}`)
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`)
+      const fullUrl = getApiEndpoint(`/api/v1/repo/${params.owner}/${params.name}`)
+      console.log('Fetching repo data from:', fullUrl)
+      
+      const response = await fetch(fullUrl, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
         }
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Repo API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorText
+        })
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`)
+        }
+
         const data = await response.json()
         setRepository(data)
       } catch (error) {
         console.error("Error fetching repository:", error)
+      setError("Failed to load repository data")
       } finally {
         setLoading(false)
       }
     }
 
-    fetchRepository()
+  useEffect(() => {
+    fetchData()
     fetchIssues(selectedIssueState, selectedIssueLabel, selectedSort)
     setCurrentPage(1) // Reset pagination when filter changes
   }, [params.owner, params.name, selectedIssueState, selectedIssueLabel, selectedSort])

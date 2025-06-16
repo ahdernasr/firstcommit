@@ -18,6 +18,7 @@ import remarkGfm from "remark-gfm"
 import SyntaxHighlighter from "react-syntax-highlighter/dist/esm/prism"
 import { tomorrow } from "react-syntax-highlighter/dist/esm/styles/prism"
 import { ArrowUp } from "lucide-react"
+import { getApiEndpoint } from '@/lib/config'
 
 interface Issue {
   id: number
@@ -126,7 +127,10 @@ export default function IssuePage() {
       
       setGuideLoading(true)
       try {
-        const response = await fetch("http://localhost:8080/api/v1/guide", {
+        const fullUrl = getApiEndpoint('/api/v1/guide')
+        console.log('Fetching guide from:', fullUrl)
+        
+        const response = await fetch(fullUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -138,7 +142,13 @@ export default function IssuePage() {
         })
 
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`)
+          const errorText = await response.text()
+          console.error('Guide API error:', {
+            status: response.status,
+            statusText: response.statusText,
+            error: errorText
+          })
+          throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`)
         }
 
         const data = await response.json()
@@ -195,7 +205,7 @@ export default function IssuePage() {
     return () => window.removeEventListener("scroll", handleScroll)
   }, [])
 
-  // Handle form submit: send user message, then send a static placeholder assistant response
+  // Handle form submit
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!input.trim() || isGenerating) return
@@ -221,7 +231,10 @@ export default function IssuePage() {
       }
       console.log("Sending request:", requestBody)
 
-      const response = await fetch("http://localhost:8080/api/v1/rag", {
+      const fullUrl = getApiEndpoint('/api/v1/rag')
+      console.log('Sending request to:', fullUrl)
+
+      const response = await fetch(fullUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -229,20 +242,14 @@ export default function IssuePage() {
         body: JSON.stringify(requestBody),
       })
 
-      let errorMessage = `Failed to get AI response (${response.status})`
-      
       if (!response.ok) {
-        // Clone the response before reading it
-        const responseClone = response.clone()
-        try {
-          const data = await responseClone.json()
-          errorMessage = data.error || errorMessage
-        } catch {
-          // If JSON parsing fails, try to get the text from the original response
-          const text = await response.text()
-          errorMessage = text || errorMessage
-        }
-        throw new Error(errorMessage)
+        const errorText = await response.text()
+        console.error('RAG API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorText
+        })
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`)
       }
 
       const data = await response.json()
