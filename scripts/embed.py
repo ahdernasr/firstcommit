@@ -250,7 +250,7 @@ def ingest_predictions_to_mongo_fast(output_prefix: str,
                 real_id = real_id
             repo_id = None # Not applicable for repos_meta itself
         else: # Logic for repos_code
-            repo_id = get_repo_id_from_chunk_id(real_id)
+            repo_id = get_repo_id_from_chunk_id(real_id).replace("--", "/")
 
         emb = json.loads(line)["predictions"][0]["embeddings"]["values"]
 
@@ -259,7 +259,7 @@ def ingest_predictions_to_mongo_fast(output_prefix: str,
             "embedding": emb,
         }
         if repo_id: # Only add repo_id if it's extracted (i.e., for code chunks)
-            doc["repo_id"] = repo_id
+            doc["repo_id"] = repo_id.replace("--", "/")
         
         # Add the original file path and text for repos_code
         if collection_name == "repos_code":
@@ -409,13 +409,14 @@ def main():
     # 2. Code embeddings
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    MAX_PARALLEL_REPOS = 1  # Allow up to X repos in parallel
+    MAX_PARALLEL_REPOS = 3  # Allow up to X repos in parallel
 
     def process_repo(repo_dir):
         if not repo_dir.is_dir():
             return 0
         repo_start = time.perf_counter()
         print(f"[PROCESS] Embedding repo: {repo_dir.name}")
+        repo_name = repo_dir.name.replace("--", "/")
         file_count = 0
         chunk_count = 0
 
@@ -443,10 +444,12 @@ def main():
             chunk_local_texts = []
 
             for idx, chunk in enumerate(chunks):
-                chunk_id = f"{repo_dir.name}/{file_path.relative_to(repo_dir.parent)}::chunk_{idx}"
+                rel_path = file_path.relative_to(repo_dir.parent)
+                path_str = str(rel_path).replace("--", "/")
+                chunk_id = f"{repo_name.replace('--', '/')}/{path_str}::chunk_{idx}"
                 chunk_local_ids.append(chunk_id)
-                chunk_local_files.append(str(file_path.relative_to(repo_dir.parent)))
-                chunk_local_texts.append(chunk)
+                chunk_local_files.append(path_str)
+                chunk_local_texts.append(chunk.replace(str(rel_path), path_str))
 
             return chunks, chunk_local_ids, chunk_local_files, chunk_local_texts
 
@@ -489,7 +492,7 @@ def main():
                     continue
                 doc = {
                     "_id": chunk_id,
-                    "repo_id": repo_dir.name,
+                    "repo_id": repo_name,
                     "file": chunk_files[i],
                     "text": chunk_texts[i],
                     "embedding": emb.tolist()
