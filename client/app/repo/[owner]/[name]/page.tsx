@@ -13,33 +13,36 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm" // Corrected import path
 import { getApiEndpoint } from '@/lib/config'
 
+interface RepoSDetail {
+  repo: Repository
+  issues: Issue[]
+}
+
 interface Repository {
-  id: number
+  id: string
+  owner: string
   name: string
   full_name: string
-  owner: {
-    login: string
-    avatar_url: string
-  }
-  html_url: string
-  description?: string
-  language?: string
+  description: string
   stargazers_count: number
   watchers_count: number
   forks_count: number
   open_issues_count: number
-  license?: {
-    name: string
-  }
-  homepage?: string
-  default_branch?: string
+  license: string
+  homepage: string
+  default_branch: string
   created_at: string
-  updated_at: string
+  pushed_at: string
+  size: number
   visibility: string
   archived: boolean
-  disabled: boolean
-  private: boolean
+  allow_forking: boolean
+  is_template: boolean
   topics: string[]
+  languages: string[]
+  image_url: string
+  readme?: string
+  score: number
 }
 
 interface Issue {
@@ -108,8 +111,8 @@ export default function RepoPage() {
 
   const fetchData = async () => {
     setLoading(true)
-      try {
-      const fullUrl = getApiEndpoint(`/api/v1/repo/${params.owner}/${params.name}`)
+    try {
+      const fullUrl = getApiEndpoint(`/api/v1/repos/${params.owner}/${params.name}`)
       console.log('Fetching repo data from:', fullUrl)
       
       const response = await fetch(fullUrl, {
@@ -127,17 +130,18 @@ export default function RepoPage() {
           error: errorText
         })
         throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`)
-        }
-
-        const data = await response.json()
-        setRepository(data)
-      } catch (error) {
-        console.error("Error fetching repository:", error)
-      setError("Failed to load repository data")
-      } finally {
-        setLoading(false)
       }
+
+      const data: RepoSDetail = await response.json()
+      console.log('Received repository data:', data)
+      setRepository(data.repo)
+    } catch (error) {
+      console.error("Error fetching repository:", error)
+      setError("Failed to load repository data")
+    } finally {
+      setLoading(false)
     }
+  }
 
   useEffect(() => {
     fetchData()
@@ -191,36 +195,36 @@ export default function RepoPage() {
         <div className="mb-12">
           <div className="flex items-center gap-4 mb-6">
             <img
-              src={repository.owner.avatar_url || "/placeholder.svg"}
-              alt={repository.owner.login}
+              src={repository.image_url || "/placeholder.svg"}
+              alt={repository.owner}
               className="w-16 h-16 rounded-full shadow-md"
             />
             <div>
-              <h1 className="text-4xl font-bold text-[#f3f3f3] mb-2">{repository.full_name}</h1>
-              <p className="text-[#f3f3f3]/70 text-lg leading-relaxed">{repository.description}</p>
+              <h1 className="text-4xl font-bold text-[#f3f3f3] mb-2">{repository.full_name || `${repository.owner}/${repository.name}`}</h1>
+              <p className="text-[#f3f3f3]/70 text-lg leading-relaxed">{repository.description || 'No description available'}</p>
             </div>
           </div>
 
           <div className="flex flex-wrap gap-6 items-center mb-6">
             <div className="flex items-center gap-2 text-[#f3f3f3]/80">
               <Star className="h-5 w-5 text-[#f1e05a]" />
-              <span className="font-medium">{repository.stargazers_count.toLocaleString()} stars</span>
+              <span className="font-medium">{repository.stargazers_count || 0} stars</span>
             </div>
             <div className="flex items-center gap-2 text-[#f3f3f3]/80">
               <GitFork className="h-5 w-5" />
-              <span className="font-medium">{repository.forks_count.toLocaleString()} forks</span>
+              <span className="font-medium">{repository.forks_count || 0} forks</span>
             </div>
             <div className="flex items-center gap-2 text-[#f3f3f3]/80">
               <Eye className="h-5 w-5" />
-              <span className="font-medium">{repository.watchers_count.toLocaleString()} watching</span>
+              <span className="font-medium">{repository.watchers_count || 0} watching</span>
             </div>
             <div className="flex items-center gap-2 text-[#f3f3f3]/80">
               <MessageSquare className="h-5 w-5" />
-              <span className="font-medium">{repository.open_issues_count.toLocaleString()} issues</span>
+              <span className="font-medium">{repository.open_issues_count || 0} issues</span>
             </div>
             <div className="flex items-center gap-2 text-[#f3f3f3]/80">
               <Calendar className="h-5 w-5" />
-              <span className="font-medium">Updated {new Date(repository.updated_at).toLocaleDateString()}</span>
+              <span className="font-medium">Updated {repository.pushed_at ? new Date(repository.pushed_at).toLocaleDateString() : 'N/A'}</span>
             </div>
             <Link
               href={`/repo/${params.owner}/${params.name}/rag`}
@@ -232,17 +236,17 @@ export default function RepoPage() {
           </div>
 
           <div className="flex flex-wrap gap-3 mb-6">
-            {repository.language && (
+            {repository.languages && repository.languages.length > 0 && (
               <Badge className="bg-[#f3c9a4] text-[#16191d] px-4 py-2 rounded-lg font-medium hover:bg-[#d4a882] transition-colors duration-200">
-                {repository.language}
+                {repository.languages[0]}
               </Badge>
             )}
             {repository.license && (
               <Badge variant="outline" className="border-[#515b65] text-[#f3f3f3]/70 px-4 py-2 rounded-lg">
-                {repository.license.name}
+                {repository.license}
               </Badge>
             )}
-            {repository.topics.map((topic) => (
+            {repository.topics && repository.topics.map((topic) => (
               <Badge
                 key={topic}
                 variant="outline"
@@ -258,7 +262,7 @@ export default function RepoPage() {
               asChild
               className="bg-transparent border border-[#f3c9a4] text-[#f3c9a4] hover:bg-[#f3c9a4]/10 active:bg-[#f3c9a4]/20 px-6 py-3 rounded-lg font-medium shadow-md hover:shadow-lg transition-all duration-200"
             >
-              <a href={repository.html_url} target="_blank" rel="noopener noreferrer">
+              <a href={repository.homepage} target="_blank" rel="noopener noreferrer">
                 <ExternalLink className="h-5 w-5 mr-2" />
                 View on GitHub
               </a>

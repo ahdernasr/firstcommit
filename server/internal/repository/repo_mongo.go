@@ -286,3 +286,18 @@ func (r *RepoMongo) GetTopContextChunks(ctx context.Context, repoID string, k in
 	}
 	return chunks, nil
 }
+
+// GetAllRepos retrieves all repositories from the federated database.
+func (r *RepoMongo) GetAllRepos(ctx context.Context) ([]models.Repo, error) {
+	cursor, err := r.federatedMetaColl.Find(ctx, bson.M{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to find repositories: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	var repos []models.Repo
+	if err := cursor.All(ctx, &repos); err != nil {
+		return nil, fmt.Errorf("failed to decode repositories: %w", err)
+	}
+	return repos, nil
+}

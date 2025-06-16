@@ -18,6 +18,7 @@ func NewSearchHandler(svc service.SearchService) *SearchHandler {
 // Register mounts the search routes.
 func (h *SearchHandler) Register(r fiber.Router) {
 	r.Get("/search", h.search)
+	r.Get("/repos", h.getAllRepos)
 }
 
 // search handles GET /api/v1/search?q=query
@@ -30,6 +31,20 @@ func (h *SearchHandler) search(c *fiber.Ctx) error {
 	}
 
 	repos, err := h.svc.Search(query)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"repositories": repos,
+	})
+}
+
+// getAllRepos handles GET /api/v1/repos
+func (h *SearchHandler) getAllRepos(c *fiber.Ctx) error {
+	repos, err := h.svc.GetAllRepos()
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
 			"error": err.Error(),

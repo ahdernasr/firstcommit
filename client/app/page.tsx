@@ -114,7 +114,7 @@ export default function HomePage() {
   const fetchInitialRepositories = async () => {
     setLoading(true);
     try {
-      const fullUrl = getApiEndpoint('/api/v1/search?q=stars:>100')
+      const fullUrl = getApiEndpoint('/api/v1/repos')
       console.log('Fetching initial repos from:', fullUrl)
       
       const response = await fetch(fullUrl, {

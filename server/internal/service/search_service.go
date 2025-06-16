@@ -16,6 +16,7 @@ type SearchRepoRepository interface {
 	// most similar to queryVec. The implementation typically uses
 	// MongoDB Atlas Vector Search.
 	VectorSearch(ctx context.Context, queryVec []float32, k int) ([]models.Repo, error)
+	GetAllRepos(ctx context.Context) ([]models.Repo, error)
 }
 
 // ---- Service interface + implementation ------------------------------------
@@ -24,6 +25,7 @@ type SearchRepoRepository interface {
 // K‑NN searches through the repository vector index.
 type SearchService interface {
 	Search(query string) ([]models.Repo, error)
+	GetAllRepos() ([]models.Repo, error)
 }
 
 type searchService struct {
@@ -71,5 +73,15 @@ func (s *searchService) Search(query string) ([]models.Repo, error) {
 		log.Printf("Result #%d: %s (score: %.4f)", i+1, repo.ID, repo.Score)
 	}
 
+	return repos, nil
+}
+
+// GetAllRepos retrieves all repositories from the federated database.
+func (s *searchService) GetAllRepos() ([]models.Repo, error) {
+	ctx := context.Background()
+	repos, err := s.repo.GetAllRepos(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all repos: %w", err)
+	}
 	return repos, nil
 }

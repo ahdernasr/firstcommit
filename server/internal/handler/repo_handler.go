@@ -18,6 +18,7 @@ func NewRepoHandler(svc service.RepoService) *RepoHandler {
 // Register mounts GET /repos/:id and GET /repos/:owner/:name/issues on the supplied router group.
 func (h *RepoHandler) Register(r fiber.Router) {
 	r.Get("/repos/:id", h.getRepo)
+	r.Get("/repos/:owner/:name", h.getRepoByOwnerName)
 	r.Get("/repos/:owner/:name/issues", h.getIssues)
 }
 
@@ -28,6 +29,23 @@ func (h *RepoHandler) getRepo(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "repo id is required")
 	}
 
+	detail, err := h.svc.GetRepo(c.UserContext(), repoID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+
+	return c.JSON(detail)
+}
+
+// getRepoByOwnerName handles GET /repos/:owner/:name
+func (h *RepoHandler) getRepoByOwnerName(c *fiber.Ctx) error {
+	owner := c.Params("owner")
+	name := c.Params("name")
+	if owner == "" || name == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "owner and name are required")
+	}
+
+	repoID := owner + "/" + name
 	detail, err := h.svc.GetRepo(c.UserContext(), repoID)
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
