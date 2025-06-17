@@ -58,6 +58,14 @@ interface Message {
   content: string
 }
 
+// Add the helper function at the top level
+function fixLooseMarkdown(md: string): string {
+  return md
+    .replace(/([^\n])\n(?=- )/g, '$1\n\n')       // ensure newline before `-` bullets
+    .replace(/^(-)(\S)/gm, '$1 $2')              // ensure space after `-`
+    .replace(/([^\n])\n(?=#+ )/g, '$1\n\n')      // ensure newline before headings
+}
+
 export default function IssuePage() {
   const params = useParams()
   const [issue, setIssue] = useState<Issue | null>(null)
@@ -465,14 +473,28 @@ export default function IssuePage() {
                                           }
 
                                           return match ? (
-                                            <SyntaxHighlighter
-                                              style={tomorrow}
-                                              language={match[1]}
-                                              PreTag="div"
-                                              {...props}
-                                            >
-                                              {String(children).replace(/\n$/, "")}
-                                            </SyntaxHighlighter>
+                                            <div className="relative group">
+                                              <SyntaxHighlighter
+                                                style={tomorrow}
+                                                language={match[1]}
+                                                PreTag="div"
+                                                className="!mt-0 !mb-0"
+                                                {...props}
+                                              >
+                                                {String(children).replace(/\n$/, "")}
+                                              </SyntaxHighlighter>
+                                              {/* Add tooltip for long file paths */}
+                                              {match[1] === 'filepath' && (
+                                                <div className="absolute inset-0 flex items-center">
+                                                  <div className="w-full overflow-hidden text-ellipsis whitespace-nowrap px-4 py-2 text-sm text-[#f3f3f3]/70">
+                                                    {children}
+                                                  </div>
+                                                  <div className="absolute inset-y-0 right-0 flex items-center">
+                                                    <div className="h-full w-8 bg-gradient-to-l from-[#16191d] to-transparent" />
+                                                  </div>
+                                                </div>
+                                              )}
+                                            </div>
                                           ) : (
                                             <code className={className} {...props}>
                                               {children}
@@ -484,7 +506,7 @@ export default function IssuePage() {
                                         ),
                                       }}
                                     >
-                                      {comment.body}
+                                      {fixLooseMarkdown(comment.body)}
                                     </ReactMarkdown>
                                   </div>
                                 </div>
@@ -544,14 +566,28 @@ export default function IssuePage() {
                       }
 
                       return match ? (
-                        <SyntaxHighlighter
-                          style={tomorrow}
-                          language={match[1]}
-                          PreTag="div"
-                          {...props}
-                        >
-                          {String(children).replace(/\n$/, "")}
-                        </SyntaxHighlighter>
+                        <div className="relative group">
+                          <SyntaxHighlighter
+                            style={tomorrow}
+                            language={match[1]}
+                            PreTag="div"
+                            className="!mt-0 !mb-0"
+                            {...props}
+                          >
+                            {String(children).replace(/\n$/, "")}
+                          </SyntaxHighlighter>
+                          {/* Add tooltip for long file paths */}
+                          {match[1] === 'filepath' && (
+                            <div className="absolute inset-0 flex items-center">
+                              <div className="w-full overflow-hidden text-ellipsis whitespace-nowrap px-4 py-2 text-sm text-[#f3f3f3]/70">
+                                {children}
+                              </div>
+                              <div className="absolute inset-y-0 right-0 flex items-center">
+                                <div className="h-full w-8 bg-gradient-to-l from-[#16191d] to-transparent" />
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       ) : (
                         <code className={className} {...props}>
                           {children}
@@ -706,14 +742,28 @@ export default function IssuePage() {
                       }
 
                       return match ? (
-                        <SyntaxHighlighter
-                          style={tomorrow}
-                          language={match[1]}
-                          PreTag="div"
-                          {...props}
-                        >
-                          {String(children).replace(/\n$/, "")}
-                        </SyntaxHighlighter>
+                        <div className="relative group">
+                          <SyntaxHighlighter
+                            style={tomorrow}
+                            language={match[1]}
+                            PreTag="div"
+                            className="!mt-0 !mb-0"
+                            {...props}
+                          >
+                            {String(children).replace(/\n$/, "")}
+                          </SyntaxHighlighter>
+                          {/* Add tooltip for long file paths */}
+                          {match[1] === 'filepath' && (
+                            <div className="absolute inset-0 flex items-center">
+                              <div className="w-full overflow-hidden text-ellipsis whitespace-nowrap px-4 py-2 text-sm text-[#f3f3f3]/70">
+                                {children}
+                              </div>
+                              <div className="absolute inset-y-0 right-0 flex items-center">
+                                <div className="h-full w-8 bg-gradient-to-l from-[#16191d] to-transparent" />
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       ) : (
                         <code className={className} {...props}>
                           {children}
@@ -823,14 +873,28 @@ export default function IssuePage() {
                               }
 
                               return match ? (
-                                <SyntaxHighlighter
-                                  style={tomorrow}
-                                  language={match[1]}
-                                  PreTag="div"
-                                  {...props}
-                                >
-                                  {String(children).replace(/\n$/, "")}
-                                </SyntaxHighlighter>
+                                <div className="relative group">
+                                  <SyntaxHighlighter
+                                    style={tomorrow}
+                                    language={match[1]}
+                                    PreTag="div"
+                                    className="!mt-0 !mb-0"
+                                    {...props}
+                                  >
+                                    {String(children).replace(/\n$/, "")}
+                                  </SyntaxHighlighter>
+                                  {/* Add tooltip for long file paths */}
+                                  {match[1] === 'filepath' && (
+                                    <div className="absolute inset-0 flex items-center">
+                                      <div className="w-full overflow-hidden text-ellipsis whitespace-nowrap px-4 py-2 text-sm text-[#f3f3f3]/70">
+                                        {children}
+                                      </div>
+                                      <div className="absolute inset-y-0 right-0 flex items-center">
+                                        <div className="h-full w-8 bg-gradient-to-l from-[#16191d] to-transparent" />
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
                               ) : (
                                 <code className={className} {...props}>
                                   {children}
@@ -965,14 +1029,28 @@ I can help you understand this issue by searching through the codebase. Here are
                                 }
 
                                 return match ? (
-                                  <SyntaxHighlighter
-                                    style={tomorrow}
-                                    language={match[1]}
-                                    PreTag="div"
-                                    {...props}
-                                  >
-                                    {String(children).replace(/\n$/, "")}
-                                  </SyntaxHighlighter>
+                                  <div className="relative group">
+                                    <SyntaxHighlighter
+                                      style={tomorrow}
+                                      language={match[1]}
+                                      PreTag="div"
+                                      className="!mt-0 !mb-0"
+                                      {...props}
+                                    >
+                                      {String(children).replace(/\n$/, "")}
+                                    </SyntaxHighlighter>
+                                    {/* Add tooltip for long file paths */}
+                                    {match[1] === 'filepath' && (
+                                      <div className="absolute inset-0 flex items-center">
+                                        <div className="w-full overflow-hidden text-ellipsis whitespace-nowrap px-4 py-2 text-sm text-[#f3f3f3]/70">
+                                          {children}
+                                        </div>
+                                        <div className="absolute inset-y-0 right-0 flex items-center">
+                                          <div className="h-full w-8 bg-gradient-to-l from-[#16191d] to-transparent" />
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
                                 ) : (
                                   <code className={className} {...props}>
                                     {children}
