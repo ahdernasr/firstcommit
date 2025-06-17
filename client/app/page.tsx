@@ -160,7 +160,7 @@ export default function HomePage() {
     <div className="min-h-screen bg-[#16191d]">
       <div className="container mx-auto px-6 py-8">
         <div className="text-center mb-12">
-          <h1 className="text-5xl text-[#f3c9a4] font-bold mb-6 leading-relaxed py-2 font-oswald">
+          <h1 className="text-5xl text-[#0b84ff] font-bold mb-6 leading-relaxed py-2 font-oswald">
             GitHub Repository Explorer
           </h1>
           <p className="text-[#f3f3f3]/80 text-xl max-w-2xl mx-auto leading-relaxed">
@@ -183,7 +183,7 @@ export default function HomePage() {
               <Button
                 type="submit"
                 disabled={loading}
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 h-10 px-6 bg-[#f3c9a4] text-black rounded-lg font-medium shadow-md hover:bg-[#d4a882] transition-all duration-200"
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 h-10 px-6 bg-[#0b84ff] text-black rounded-lg font-medium shadow-md hover:bg-[#0066cc] transition-all duration-200"
               >
                 {loading ? "Searching..." : "Search"}
               </Button>
@@ -201,49 +201,49 @@ export default function HomePage() {
                 <SelectContent className="bg-[#292f36] border-[#515b65] rounded-lg shadow-lg">
                   <SelectItem
                     value="all"
-                    className="text-[#f3f3f3] hover:bg-[#f3c9a4]/10 focus:bg-[#f3c9a4]/10 focus:text-[#f3f3f3]"
+                    className="text-[#f3f3f3] hover:bg-[#0b84ff]/10 focus:bg-[#0b84ff]/10 focus:text-[#f3f3f3]"
                   >
                     All Languages
                   </SelectItem>
                   <SelectItem
                     value="javascript"
-                    className="text-[#f3f3f3] hover:bg-[#f3c9a4]/10 focus:bg-[#f3c9a4]/10 focus:text-[#f3f3f3]"
+                    className="text-[#f3f3f3] hover:bg-[#0b84ff]/10 focus:bg-[#0b84ff]/10 focus:text-[#f3f3f3]"
                   >
                     JavaScript
                   </SelectItem>
                   <SelectItem
                     value="typescript"
-                    className="text-[#f3f3f3] hover:bg-[#f3c9a4]/10 focus:bg-[#f3c9a4]/10 focus:text-[#f3f3f3]"
+                    className="text-[#f3f3f3] hover:bg-[#0b84ff]/10 focus:bg-[#0b84ff]/10 focus:text-[#f3f3f3]"
                   >
                     TypeScript
                   </SelectItem>
                   <SelectItem
                     value="python"
-                    className="text-[#f3f3f3] hover:bg-[#f3c9a4]/10 focus:bg-[#f3c9a4]/10 focus:text-[#f3f3f3]"
+                    className="text-[#f3f3f3] hover:bg-[#0b84ff]/10 focus:bg-[#0b84ff]/10 focus:text-[#f3f3f3]"
                   >
                     Python
                   </SelectItem>
                   <SelectItem
                     value="java"
-                    className="text-[#f3f3f3] hover:bg-[#f3c9a4]/10 focus:bg-[#f3c9a4]/10 focus:text-[#f3f3f3]"
+                    className="text-[#f3f3f3] hover:bg-[#0b84ff]/10 focus:bg-[#0b84ff]/10 focus:text-[#f3f3f3]"
                   >
                     Java
                   </SelectItem>
                   <SelectItem
                     value="go"
-                    className="text-[#f3f3f3] hover:bg-[#f3c9a4]/10 focus:bg-[#f3c9a4]/10 focus:text-[#f3f3f3]"
+                    className="text-[#f3f3f3] hover:bg-[#0b84ff]/10 focus:bg-[#0b84ff]/10 focus:text-[#f3f3f3]"
                   >
                     Go
                   </SelectItem>
                   <SelectItem
                     value="rust"
-                    className="text-[#f3f3f3] hover:bg-[#f3c9a4]/10 focus:bg-[#f3c9a4]/10 focus:text-[#f3f3f3]"
+                    className="text-[#f3f3f3] hover:bg-[#0b84ff]/10 focus:bg-[#0b84ff]/10 focus:text-[#f3f3f3]"
                   >
                     Rust
                   </SelectItem>
                   <SelectItem
                     value="cpp"
-                    className="text-[#f3f3f3] hover:bg-[#f3c9a4]/10 focus:bg-[#f3c9a4]/10 focus:text-[#f3f3f3]"
+                    className="text-[#f3f3f3] hover:bg-[#0b84ff]/10 focus:bg-[#0b84ff]/10 focus:text-[#f3f3f3]"
                   >
                     C++
                   </SelectItem>
@@ -260,37 +260,37 @@ export default function HomePage() {
                 <SelectContent className="bg-[#292f36] border-[#515b65] rounded-lg shadow-lg">
                   <SelectItem
                     value="all"
-                    className="text-[#f3f3f3] hover:bg-[#f3c9a4]/10 focus:bg-[#f3c9a4]/10 focus:text-[#f3f3f3]"
+                    className="text-[#f3f3f3] hover:bg-[#0b84ff]/10 focus:bg-[#0b84ff]/10 focus:text-[#f3f3f3]"
                   >
                     All Topics
                   </SelectItem>
                   <SelectItem
                     value="frontend"
-                    className="text-[#f3f3f3] hover:bg-[#f3c9a4]/10 focus:bg-[#f3c9a4]/10 focus:text-[#f3f3f3]"
+                    className="text-[#f3f3f3] hover:bg-[#0b84ff]/10 focus:bg-[#0b84ff]/10 focus:text-[#f3f3f3]"
                   >
                     Frontend
                   </SelectItem>
                   <SelectItem
                     value="backend"
-                    className="text-[#f3f3f3] hover:bg-[#f3c9a4]/10 focus:bg-[#f3c9a4]/10 focus:text-[#f3f3f3]"
+                    className="text-[#f3f3f3] hover:bg-[#0b84ff]/10 focus:bg-[#0b84ff]/10 focus:text-[#f3f3f3]"
                   >
                     Backend
                   </SelectItem>
                   <SelectItem
                     value="devops"
-                    className="text-[#f3f3f3] hover:bg-[#f3c9a4]/10 focus:bg-[#f3c9a4]/10 focus:text-[#f3f3f3]"
+                    className="text-[#f3f3f3] hover:bg-[#0b84ff]/10 focus:bg-[#0b84ff]/10 focus:text-[#f3f3f3]"
                   >
                     DevOps
                   </SelectItem>
                   <SelectItem
                     value="mobile"
-                    className="text-[#f3f3f3] hover:bg-[#f3c9a4]/10 focus:bg-[#f3c9a4]/10 focus:text-[#f3f3f3]"
+                    className="text-[#f3f3f3] hover:bg-[#0b84ff]/10 focus:bg-[#0b84ff]/10 focus:text-[#f3f3f3]"
                   >
                     Mobile
                   </SelectItem>
                   <SelectItem
                     value="ai"
-                    className="text-[#f3f3f3] hover:bg-[#f3c9a4]/10 focus:bg-[#f3c9a4]/10 focus:text-[#f3f3f3]"
+                    className="text-[#f3f3f3] hover:bg-[#0b84ff]/10 focus:bg-[#0b84ff]/10 focus:text-[#f3f3f3]"
                   >
                     AI / ML
                   </SelectItem>
@@ -307,19 +307,19 @@ export default function HomePage() {
                 <SelectContent className="bg-[#292f36] border-[#515b65] rounded-lg shadow-lg">
                   <SelectItem
                     value="stars"
-                    className="text-[#f3f3f3] hover:bg-[#f3c9a4]/10 focus:bg-[#f3c9a4]/10 focus:text-[#f3f3f3]"
+                    className="text-[#f3f3f3] hover:bg-[#0b84ff]/10 focus:bg-[#0b84ff]/10 focus:text-[#f3f3f3]"
                   >
                     Stars
                   </SelectItem>
                   <SelectItem
                     value="forks"
-                    className="text-[#f3f3f3] hover:bg-[#f3c9a4]/10 focus:bg-[#f3c9a4]/10 focus:text-[#f3f3f3]"
+                    className="text-[#f3f3f3] hover:bg-[#0b84ff]/10 focus:bg-[#0b84ff]/10 focus:text-[#f3f3f3]"
                   >
                     Forks
                   </SelectItem>
                   <SelectItem
                     value="updated"
-                    className="text-[#f3f3f3] hover:bg-[#f3c9a4]/10 focus:bg-[#f3c9a4]/10 focus:text-[#f3f3f3]"
+                    className="text-[#f3f3f3] hover:bg-[#0b84ff]/10 focus:bg-[#0b84ff]/10 focus:text-[#f3f3f3]"
                   >
                     Recently Updated
                   </SelectItem>
@@ -424,7 +424,7 @@ export default function HomePage() {
                               <Badge
                                 key={topic}
                                 variant="outline"
-                                className="border-[#515b65] text-[#f3f3f3]/70 px-3 py-1 rounded-md hover:border-[#f3c9a4]/50 hover:text-[#f3c9a4] transition-colors duration-200"
+                                className="border-[#515b65] text-[#f3f3f3]/70 px-3 py-1 rounded-md hover:border-[#0b84ff]/50 hover:text-[#0b84ff] transition-colors duration-200"
                               >
                                 {topic}
                               </Badge>
@@ -449,7 +449,7 @@ export default function HomePage() {
               </p>
               <Button
                 variant="outline"
-                className="bg-transparent border border-[#f3c9a4] text-[#f3c9a4] hover:bg-[#f3c9a4]/10 active:bg-[#f3c9a4]/20 rounded-lg px-6 py-3 font-medium transition-all duration-200"
+                className="bg-transparent border border-[#0b84ff] text-[#0b84ff] hover:bg-[#0b84ff]/10 active:bg-[#0b84ff]/20 rounded-lg px-6 py-3 font-medium transition-all duration-200"
                 onClick={() => {
                   setSearchQuery("");
                   setRepositories([]);

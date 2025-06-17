@@ -9,9 +9,9 @@
   --card-foreground: #f3f3f3;
   --popover: #292f36;
   --popover-foreground: #f3f3f3;
-  --primary: #f3c9a4;
+  --primary: #0b84ff;
   --primary-foreground: #16191d;
-  --primary-variant: #c29c72;
+  --primary-variant: #0066cc;
   --secondary: #3ac8bd;
   --secondary-foreground: #16191d;
   --secondary-variant: #2aa39a;
@@ -23,7 +23,7 @@
   --destructive-foreground: #000000;
   --border: #515b65;
   --input: #515b65;
-  --ring: #f3c9a4;
+  --ring: #0b84ff;
   --radius: 8px;
 }
 
@@ -38,7 +38,7 @@
 
 /* Custom gradient text animation */
 .gradient-text {
-  background: linear-gradient(-45deg, #f3c9a4 50%, #3ac8bd 50%); /* 50% peach, 50% teal */
+  background: linear-gradient(-45deg, #0b84ff 50%, #3ac8bd 50%); /* 50% blue, 50% teal */
   background-size: 400% 400%;
   background-clip: text;
   -webkit-background-clip: text;
@@ -75,7 +75,7 @@
   --tw-prose-body: #f3f3f3;
   --tw-prose-headings: #f3f3f3;
   --tw-prose-lead: #f3f3f3;
-  --tw-prose-links: #f3c9a4;
+  --tw-prose-links: #0b84ff;
   --tw-prose-bold: #f3f3f3;
   --tw-prose-counters: #f3f3f3;
   --tw-prose-bullets: #515b65;
@@ -102,13 +102,13 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(135deg, #f3c9a4 50%, #3ac8bd 50%);
+  background: linear-gradient(135deg, #0b84ff 50%, #3ac8bd 50%);
   border-radius: 4px;
   border: 1px solid #292f36;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(135deg, #d4a882, #2aa39a);
+  background: linear-gradient(135deg, #0066cc, #2aa39a);
 }
 
 ::-webkit-scrollbar-corner {
@@ -118,7 +118,7 @@
 /* Firefox scrollbar styling */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #f3c9a4 #16191d;
+  scrollbar-color: #0b84ff #16191d;
 }
 
 /* Custom scrollbar for specific components */
@@ -132,10 +132,10 @@
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: linear-gradient(135deg, #f3c9a4 50%, #3ac8bd 50%);
+  background: linear-gradient(135deg, #0b84ff 50%, #3ac8bd 50%);
   border-radius: 3px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(135deg, #d4a882, #2aa39a);
+  background: linear-gradient(135deg, #0066cc, #2aa39a);
 }

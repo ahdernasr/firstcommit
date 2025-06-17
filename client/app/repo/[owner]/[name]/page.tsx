@@ -226,22 +226,15 @@ export default function RepoPage() {
               <MessageSquare className="h-5 w-5" />
               <span className="font-medium">{repository.open_issues_count || 0} issues</span>
             </div>
-            <div className="flex items-center gap-2 text-[#f3f3f3]/80">
+            <div className="flex items-center gap-2 text-[#f3f3f3]/70">
               <Calendar className="h-5 w-5" />
               <span className="font-medium">Updated {repository.pushed_at ? new Date(repository.pushed_at).toLocaleDateString() : 'N/A'}</span>
             </div>
-            <Link
-              href={`/repo/${params.owner}/${params.name}/rag`}
-              className="flex items-center gap-2 text-[#f3f3f3]/80 hover:text-[#f3c9a4] transition-colors"
-            >
-              <Sparkles className="h-5 w-5" />
-              <span className="font-medium">Ask AI</span>
-            </Link>
           </div>
 
           <div className="flex flex-wrap gap-3 mb-6">
             {repository.languages && repository.languages.length > 0 && (
-              <Badge className="bg-[#f3c9a4] text-[#16191d] px-4 py-2 rounded-lg font-medium hover:bg-[#d4a882] transition-colors duration-200">
+              <Badge className="bg-[#0b84ff] text-[#16191d] px-4 py-2 rounded-lg font-medium hover:bg-[#0066cc] transition-colors duration-200">
                 {repository.languages[0]}
               </Badge>
             )}
@@ -254,7 +247,7 @@ export default function RepoPage() {
               <Badge
                 key={topic}
                 variant="outline"
-                className="border-[#515b65] text-[#f3f3f3]/70 px-4 py-2 rounded-lg hover:border-[#f3c9a4]/50 hover:text-[#f3c9a4] transition-colors duration-200"
+                className="border-[#515b65] text-[#f3f3f3]/70 px-4 py-2 rounded-lg hover:border-[#0b84ff]/50 hover:text-[#0b84ff] transition-colors duration-200"
               >
                 {topic}
               </Badge>
@@ -264,7 +257,7 @@ export default function RepoPage() {
           <div className="flex gap-4">
             <Button
               asChild
-              className="bg-transparent border border-[#f3c9a4] text-[#f3c9a4] hover:bg-[#f3c9a4]/10 active:bg-[#f3c9a4]/20 px-6 py-3 rounded-lg font-medium shadow-md hover:shadow-lg transition-all duration-200"
+              className="bg-transparent border border-[#0b84ff] text-[#0b84ff] hover:bg-[#0b84ff]/10 active:bg-[#0b84ff]/20 px-6 py-3 rounded-lg font-medium shadow-md hover:shadow-lg transition-all duration-200"
             >
               <a href={repository.homepage} target="_blank" rel="noopener noreferrer">
                 <ExternalLink className="h-5 w-5 mr-2" />
@@ -294,7 +287,7 @@ export default function RepoPage() {
                 {/* Issue State Filter */}
                 <div className="space-y-3">
                   <h3 className="text-sm font-semibold text-[#f3f3f3] uppercase tracking-wide flex items-center gap-2">
-                    <div className="w-1 h-4 bg-[#f3c9a4] rounded-full"></div>
+                    <div className="w-1 h-4 bg-[#0b84ff] rounded-full"></div>
                     Issue State
                   </h3>
                   <div className="grid grid-cols-1 gap-2">
@@ -303,8 +296,8 @@ export default function RepoPage() {
                       onClick={() => setSelectedIssueState("open")}
                       className={`w-full justify-start text-sm ${
                         selectedIssueState === "open"
-                          ? "bg-[#f3c9a4]/10 border-[#f3c9a4] text-[#f3c9a4] hover:bg-[#f3c9a4]/20"
-                          : "bg-transparent border-[#515b65] text-[#f3f3f3]/60 hover:bg-[#f3c9a4]/10 hover:border-[#f3c9a4] hover:text-[#f3c9a4]"
+                          ? "bg-[#0b84ff]/10 border-[#0b84ff] text-[#0b84ff] hover:bg-[#0b84ff]/20"
+                          : "bg-transparent border-[#515b65] text-[#f3f3f3]/60 hover:bg-[#0b84ff]/10 hover:border-[#0b84ff] hover:text-[#0b84ff]"
                       }`}
                     >
                       Open Issues
@@ -314,8 +307,8 @@ export default function RepoPage() {
                       onClick={() => setSelectedIssueState("closed")}
                       className={`w-full justify-start text-sm ${
                         selectedIssueState === "closed"
-                          ? "bg-[#f3c9a4]/10 border-[#f3c9a4] text-[#f3c9a4] hover:bg-[#f3c9a4]/20"
-                          : "bg-transparent border-[#515b65] text-[#f3f3f3]/60 hover:bg-[#f3c9a4]/10 hover:border-[#f3c9a4] hover:text-[#f3c9a4]"
+                          ? "bg-[#0b84ff]/10 border-[#0b84ff] text-[#0b84ff] hover:bg-[#0b84ff]/20"
+                          : "bg-transparent border-[#515b65] text-[#f3f3f3]/60 hover:bg-[#0b84ff]/10 hover:border-[#0b84ff] hover:text-[#0b84ff]"
                       }`}
                     >
                       Closed Issues
@@ -328,7 +321,7 @@ export default function RepoPage() {
                 {/* Label Filters */}
                 <div className="space-y-3">
                   <h3 className="text-sm font-semibold text-[#f3f3f3] uppercase tracking-wide flex items-center gap-2">
-                    <div className="w-1 h-4 bg-[#f3c9a4] rounded-full"></div>
+                    <div className="w-1 h-4 bg-[#0b84ff] rounded-full"></div>
                     Filter by Label
                   </h3>
                   <div className="grid grid-cols-1 gap-2">
@@ -337,8 +330,8 @@ export default function RepoPage() {
                       onClick={() => setSelectedIssueLabel("all")}
                       className={`w-full justify-start text-sm ${
                         selectedIssueLabel === "all"
-                          ? "bg-[#f3c9a4]/10 border-[#f3c9a4] text-[#f3c9a4] hover:bg-[#f3c9a4]/20"
-                          : "bg-transparent border-[#515b65] text-[#f3f3f3]/60 hover:bg-[#f3c9a4]/10 hover:border-[#f3c9a4] hover:text-[#f3c9a4]"
+                          ? "bg-[#0b84ff]/10 border-[#0b84ff] text-[#0b84ff] hover:bg-[#0b84ff]/20"
+                          : "bg-transparent border-[#515b65] text-[#f3f3f3]/60 hover:bg-[#0b84ff]/10 hover:border-[#0b84ff] hover:text-[#0b84ff]"
                       }`}
                     >
                       All Labels
@@ -348,8 +341,8 @@ export default function RepoPage() {
                       onClick={() => setSelectedIssueLabel("good first issue")}
                       className={`w-full justify-start text-sm ${
                         selectedIssueLabel === "good first issue"
-                          ? "bg-[#f3c9a4]/10 border-[#f3c9a4] text-[#f3c9a4] hover:bg-[#f3c9a4]/20"
-                          : "bg-transparent border-[#515b65] text-[#f3f3f3]/60 hover:bg-[#f3c9a4]/10 hover:border-[#f3c9a4] hover:text-[#f3c9a4]"
+                          ? "bg-[#0b84ff]/10 border-[#0b84ff] text-[#0b84ff] hover:bg-[#0b84ff]/20"
+                          : "bg-transparent border-[#515b65] text-[#f3f3f3]/60 hover:bg-[#0b84ff]/10 hover:border-[#0b84ff] hover:text-[#0b84ff]"
                       }`}
                     >
                       <div className="flex items-center gap-2">
@@ -362,8 +355,8 @@ export default function RepoPage() {
                       onClick={() => setSelectedIssueLabel("help wanted")}
                       className={`w-full justify-start text-sm ${
                         selectedIssueLabel === "help wanted"
-                          ? "bg-[#f3c9a4]/10 border-[#f3c9a4] text-[#f3c9a4] hover:bg-[#f3c9a4]/20"
-                          : "bg-transparent border-[#515b65] text-[#f3f3f3]/60 hover:bg-[#f3c9a4]/10 hover:border-[#f3c9a4] hover:text-[#f3c9a4]"
+                          ? "bg-[#0b84ff]/10 border-[#0b84ff] text-[#0b84ff] hover:bg-[#0b84ff]/20"
+                          : "bg-transparent border-[#515b65] text-[#f3f3f3]/60 hover:bg-[#0b84ff]/10 hover:border-[#0b84ff] hover:text-[#0b84ff]"
                       }`}
                     >
                       <div className="flex items-center gap-2">
@@ -376,8 +369,8 @@ export default function RepoPage() {
                       onClick={() => setSelectedIssueLabel("bug")}
                       className={`w-full justify-start text-sm ${
                         selectedIssueLabel === "bug"
-                          ? "bg-[#f3c9a4]/10 border-[#f3c9a4] text-[#f3c9a4] hover:bg-[#f3c9a4]/20"
-                          : "bg-transparent border-[#515b65] text-[#f3f3f3]/60 hover:bg-[#f3c9a4]/10 hover:border-[#f3c9a4] hover:text-[#f3c9a4]"
+                          ? "bg-[#0b84ff]/10 border-[#0b84ff] text-[#0b84ff] hover:bg-[#0b84ff]/20"
+                          : "bg-transparent border-[#515b65] text-[#f3f3f3]/60 hover:bg-[#0b84ff]/10 hover:border-[#0b84ff] hover:text-[#0b84ff]"
                       }`}
                     >
                       <div className="flex items-center gap-2">
@@ -390,8 +383,8 @@ export default function RepoPage() {
                       onClick={() => setSelectedIssueLabel("enhancement")}
                       className={`w-full justify-start text-sm ${
                         selectedIssueLabel === "enhancement"
-                          ? "bg-[#f3c9a4]/10 border-[#f3c9a4] text-[#f3c9a4] hover:bg-[#f3c9a4]/20"
-                          : "bg-transparent border-[#515b65] text-[#f3f3f3]/60 hover:bg-[#f3c9a4]/10 hover:border-[#f3c9a4] hover:text-[#f3c9a4]"
+                          ? "bg-[#0b84ff]/10 border-[#0b84ff] text-[#0b84ff] hover:bg-[#0b84ff]/20"
+                          : "bg-transparent border-[#515b65] text-[#f3f3f3]/60 hover:bg-[#0b84ff]/10 hover:border-[#0b84ff] hover:text-[#0b84ff]"
                       }`}
                     >
                       <div className="flex items-center gap-2">
@@ -404,8 +397,8 @@ export default function RepoPage() {
                       onClick={() => setSelectedIssueLabel("documentation")}
                       className={`w-full justify-start text-sm ${
                         selectedIssueLabel === "documentation"
-                          ? "bg-[#f3c9a4]/10 border-[#f3c9a4] text-[#f3c9a4] hover:bg-[#f3c9a4]/20"
-                          : "bg-transparent border-[#515b65] text-[#f3f3f3]/60 hover:bg-[#f3c9a4]/10 hover:border-[#f3c9a4] hover:text-[#f3c9a4]"
+                          ? "bg-[#0b84ff]/10 border-[#0b84ff] text-[#0b84ff] hover:bg-[#0b84ff]/20"
+                          : "bg-transparent border-[#515b65] text-[#f3f3f3]/60 hover:bg-[#0b84ff]/10 hover:border-[#0b84ff] hover:text-[#0b84ff]"
                       }`}
                     >
                       <div className="flex items-center gap-2">
@@ -421,7 +414,7 @@ export default function RepoPage() {
                 {/* Sort Options */}
                 <div className="space-y-3">
                   <h3 className="text-sm font-semibold text-[#f3f3f3] uppercase tracking-wide flex items-center gap-2">
-                    <div className="w-1 h-4 bg-[#f3c9a4] rounded-full"></div>
+                    <div className="w-1 h-4 bg-[#0b84ff] rounded-full"></div>
                     Sort By
                   </h3>
                   <div className="grid grid-cols-1 gap-2">
@@ -430,8 +423,8 @@ export default function RepoPage() {
                       onClick={() => setSelectedSort("created")}
                       className={`w-full justify-start text-sm ${
                         selectedSort === "created"
-                          ? "bg-[#f3c9a4]/10 border-[#f3c9a4] text-[#f3c9a4] hover:bg-[#f3c9a4]/20"
-                          : "bg-transparent border-[#515b65] text-[#f3f3f3]/60 hover:bg-[#f3c9a4]/10 hover:border-[#f3c9a4] hover:text-[#f3c9a4]"
+                          ? "bg-[#0b84ff]/10 border-[#0b84ff] text-[#0b84ff] hover:bg-[#0b84ff]/20"
+                          : "bg-transparent border-[#515b65] text-[#f3f3f3]/60 hover:bg-[#0b84ff]/10 hover:border-[#0b84ff] hover:text-[#0b84ff]"
                       }`}
                     >
                       Newest First
@@ -441,8 +434,8 @@ export default function RepoPage() {
                       onClick={() => setSelectedSort("updated")}
                       className={`w-full justify-start text-sm ${
                         selectedSort === "updated"
-                          ? "bg-[#f3c9a4]/10 border-[#f3c9a4] text-[#f3c9a4] hover:bg-[#f3c9a4]/20"
-                          : "bg-transparent border-[#515b65] text-[#f3f3f3]/60 hover:bg-[#f3c9a4]/10 hover:border-[#f3c9a4] hover:text-[#f3c9a4]"
+                          ? "bg-[#0b84ff]/10 border-[#0b84ff] text-[#0b84ff] hover:bg-[#0b84ff]/20"
+                          : "bg-transparent border-[#515b65] text-[#f3f3f3]/60 hover:bg-[#0b84ff]/10 hover:border-[#0b84ff] hover:text-[#0b84ff]"
                       }`}
                     >
                       Recently Updated
@@ -452,8 +445,8 @@ export default function RepoPage() {
                       onClick={() => setSelectedSort("comments")}
                       className={`w-full justify-start text-sm ${
                         selectedSort === "comments"
-                          ? "bg-[#f3c9a4]/10 border-[#f3c9a4] text-[#f3c9a4] hover:bg-[#f3c9a4]/20"
-                          : "bg-transparent border-[#515b65] text-[#f3f3f3]/60 hover:bg-[#f3c9a4]/10 hover:border-[#f3c9a4] hover:text-[#f3c9a4]"
+                          ? "bg-[#0b84ff]/10 border-[#0b84ff] text-[#0b84ff] hover:bg-[#0b84ff]/20"
+                          : "bg-transparent border-[#515b65] text-[#f3f3f3]/60 hover:bg-[#0b84ff]/10 hover:border-[#0b84ff] hover:text-[#0b84ff]"
                       }`}
                     >
                       Most Comments
@@ -472,7 +465,7 @@ export default function RepoPage() {
                   <MessageSquare className="h-6 w-6" />
                   {selectedIssueState === "open" ? "Open Issues" : "Closed Issues"}
                   {selectedIssueLabel !== "all" && (
-                    <Badge variant="outline" className="border-[#f3c9a4] text-[#f3c9a4] text-sm">
+                    <Badge variant="outline" className="border-[#0b84ff] text-[#0b84ff] text-sm">
                       {selectedIssueLabel}
                     </Badge>
                   )}
@@ -517,8 +510,7 @@ export default function RepoPage() {
                                       #{issue.number} {issue.title}
                                     </h3>
                                     <Link href={`/repo/${params.owner}/${params.name}/issue/${issue.number}`}>
-                                      <Button className="bg-gradient-to-r from-[#f3c9a4] to-[#3ac8bd] bg-size-200 animate-gradient-x text-[#16191d] px-4 py-2 rounded-lg font-medium shadow-md hover:shadow-lg transition-all duration-200">
-                                        <Sparkles className="h-4 w-4 mr-2" />
+                                      <Button className="bg-[#0b84ff] text-[#16191d] px-4 py-2 rounded-lg font-medium shadow-md hover:shadow-lg transition-all duration-200">
                                         Guide Me
                                       </Button>
                                     </Link>
@@ -580,7 +572,7 @@ export default function RepoPage() {
                                       size="sm"
                                       onClick={() => currentPage > 1 && paginate(currentPage - 1)}
                                       disabled={currentPage === 1}
-                                      className="border-[#515b65] text-[#f3f3f3] hover:bg-[#f3c9a4]/10 hover:border-[#f3c9a4] hover:text-[#f3c9a4] disabled:opacity-50"
+                                      className="border-[#515b65] text-[#f3f3f3] hover:bg-[#0b84ff]/10 hover:border-[#0b84ff] hover:text-[#0b84ff] disabled:opacity-50"
                                     >
                                       Previous
                                     </Button>
@@ -607,7 +599,7 @@ export default function RepoPage() {
                                             variant="outline"
                                             size="sm"
                                             onClick={() => paginate(1)}
-                                            className="border-[#515b65] text-[#f3f3f3] hover:bg-[#f3c9a4]/10 hover:border-[#f3c9a4] hover:text-[#f3c9a4]"
+                                            className="border-[#515b65] text-[#f3f3f3] hover:bg-[#0b84ff]/10 hover:border-[#0b84ff] hover:text-[#0b84ff]"
                                           >
                                             1
                                           </Button>,
@@ -631,8 +623,8 @@ export default function RepoPage() {
                                             onClick={() => paginate(i)}
                                             className={
                                               currentPage === i
-                                                ? "bg-[#f3c9a4] text-[#16191d]"
-                                                : "border-[#515b65] text-[#f3f3f3] hover:bg-[#f3c9a4]/10 hover:border-[#f3c9a4] hover:text-[#f3c9a4]"
+                                                ? "bg-[#0b84ff] text-[#16191d]"
+                                                : "border-[#515b65] text-[#f3f3f3] hover:bg-[#0b84ff]/10 hover:border-[#0b84ff] hover:text-[#0b84ff]"
                                             }
                                           >
                                             {i}
@@ -655,7 +647,7 @@ export default function RepoPage() {
                                             variant="outline"
                                             size="sm"
                                             onClick={() => paginate(totalPages)}
-                                            className="border-[#515b65] text-[#f3f3f3] hover:bg-[#f3c9a4]/10 hover:border-[#f3c9a4] hover:text-[#f3c9a4]"
+                                            className="border-[#515b65] text-[#f3f3f3] hover:bg-[#0b84ff]/10 hover:border-[#0b84ff] hover:text-[#0b84ff]"
                                           >
                                             {totalPages}
                                           </Button>,
@@ -670,7 +662,7 @@ export default function RepoPage() {
                                       size="sm"
                                       onClick={() => currentPage < totalPages && paginate(currentPage + 1)}
                                       disabled={currentPage === totalPages}
-                                      className="border-[#515b65] text-[#f3f3f3] hover:bg-[#f3c9a4]/10 hover:border-[#f3c9a4] hover:text-[#f3c9a4] disabled:opacity-50"
+                                      className="border-[#515b65] text-[#f3f3f3] hover:bg-[#0b84ff]/10 hover:border-[#0b84ff] hover:text-[#0b84ff] disabled:opacity-50"
                                     >
                                       Next
                                     </Button>

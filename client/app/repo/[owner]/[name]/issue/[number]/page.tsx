@@ -390,7 +390,7 @@ export default function IssuePage() {
           <Link href={`/repo/${params.owner}/${params.name}`}>
             <Button
               variant="ghost"
-              className="gap-3 bg-transparent text-[#f3c9a4] hover:bg-[#f3c9a4]/10 active:bg-[#f3c9a4]/20 rounded-lg px-4 py-3 font-medium transition-all duration-200"
+              className="gap-3 bg-transparent text-[#0b84ff] hover:bg-[#0b84ff]/10 active:bg-[#0b84ff]/20 rounded-lg px-4 py-3 font-medium transition-all duration-200"
             >
               <ArrowLeft className="h-5 w-5" />
               Back to Repository
@@ -423,7 +423,7 @@ export default function IssuePage() {
                     <Dialog>
                       <DialogTrigger asChild>
                         <button
-                          className="flex items-center gap-2 text-sm text-[#f3f3f3]/70 hover:text-[#f3c9a4] transition-colors cursor-pointer"
+                          className="flex items-center gap-2 text-sm text-[#f3f3f3]/70 hover:text-[#0b84ff] transition-colors cursor-pointer"
                           onClick={fetchComments}
                         >
                           <MessageSquare className="h-4 w-4" />
@@ -523,7 +523,7 @@ export default function IssuePage() {
               <Badge
                 variant={issue.state === "open" ? "default" : "secondary"}
                 className={`px-4 py-2 rounded-lg font-medium cursor-default ${
-                  issue.state === "open" ? "bg-[#f3c9a4] text-[#16191d]" : "bg-[#515b65] text-[#f3f3f3]"
+                  issue.state === "open" ? "bg-[#0b84ff] text-[#16191d]" : "bg-[#515b65] text-[#f3f3f3]"
                 }`}
               >
                 {issue.state}
@@ -623,7 +623,7 @@ export default function IssuePage() {
                     ),
                     li: ({ children }) => <li className="text-[#f3f3f3]">{children}</li>,
                     blockquote: ({ children }) => (
-                      <blockquote className="border-l-4 border-[#f3c9a4] pl-4 italic my-4 text-[#f3f3f3]/80 bg-[#f3c9a4]/5 py-2 rounded-r">
+                      <blockquote className="border-l-4 border-[#0b84ff] pl-4 italic my-4 text-[#f3f3f3]/80 bg-[#0b84ff]/5 py-2 rounded-r">
                         {children}
                       </blockquote>
                     ),
@@ -643,7 +643,7 @@ export default function IssuePage() {
                       return (
                         <a
                           href={href}
-                          className="text-[#f3c9a4] hover:underline"
+                          className="text-[#0b84ff] hover:underline"
                           target="_blank"
                           rel="noopener noreferrer"
                         >
@@ -667,7 +667,7 @@ export default function IssuePage() {
                     td: ({ children }) => (
                       <td className="border border-[#515b65] px-4 py-3 text-[#f3f3f3]">{children}</td>
                     ),
-                    strong: ({ children }) => <strong className="font-bold text-[#f3c9a4]">{children}</strong>,
+                    strong: ({ children }) => <strong className="font-bold text-[#0b84ff]">{children}</strong>,
                     em: ({ children }) => <em className="italic text-[#f3f3f3]/90">{children}</em>,
                     hr: () => <hr className="border-[#515b65] my-6" />,
                     img: ({ src, alt }) => (
@@ -692,19 +692,7 @@ export default function IssuePage() {
         <Card className="mb-12 bg-[#292f36] border-[#515b65] rounded-lg shadow-lg">
           <CardHeader className="p-6 pb-0">
             <CardTitle className="flex items-center gap-2 text-xl">
-              <div className="relative h-6 w-6">
-                <div
-                  className="absolute inset-0 h-6 w-6"
-                  style={{
-                    background: "linear-gradient(-45deg, #f3c9a4, #3ac8bd, #f3c9a4, #3ac8bd)",
-                    backgroundSize: "400% 400%",
-                    animation: "gradient-x 6s ease infinite",
-                    WebkitMask: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'%3E%3Cpath d='M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z'/%3E%3Cpath d='M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z'/%3E%3C/svg%3E\") center/contain no-repeat",
-                    mask: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'%3E%3Cpath d='M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z'/%3E%3Cpath d='M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z'/%3E%3C/svg%3E\") center/contain no-repeat",
-                  }}
-                />
-              </div>
-              <span className="bg-gradient-to-r from-[#f3c9a4] to-[#3ac8bd] bg-clip-text text-transparent bg-size-200 animate-gradient-x font-semibold">
+              <span className="text-[#0b84ff] font-semibold">
                 First-Time Contributor Guide
               </span>
             </CardTitle>
@@ -714,7 +702,7 @@ export default function IssuePage() {
               <div className="space-y-6">
                 <div className="flex items-center gap-3">
                   <div className="h-4 w-4 relative">
-                    <div className="absolute inset-0 h-4 w-4 rounded-full border-2 border-[#f3c9a4] border-t-transparent animate-spin" />
+                    <div className="absolute inset-0 h-4 w-4 rounded-full border-2 border-[#0b84ff] border-t-transparent animate-spin" />
                   </div>
                   <div className="text-[#f3f3f3]/60 font-medium">
                     {loadingMessage}
@@ -789,7 +777,7 @@ export default function IssuePage() {
                     ),
                     li: ({ children }) => <li className="text-[#f3f3f3]">{children}</li>,
                     blockquote: ({ children }) => (
-                      <blockquote className="border-l-4 border-[#f3c9a4] pl-4 italic my-4 text-[#f3f3f3]/80 bg-[#f3c9a4]/5 py-2 rounded-r">
+                      <blockquote className="border-l-4 border-[#0b84ff] pl-4 italic my-4 text-[#f3f3f3]/80 bg-[#0b84ff]/5 py-2 rounded-r">
                         {children}
                       </blockquote>
                     ),
@@ -809,7 +797,7 @@ export default function IssuePage() {
                       return (
                         <a
                           href={href}
-                          className="text-[#f3c9a4] hover:underline"
+                          className="text-[#0b84ff] hover:underline"
                           target="_blank"
                           rel="noopener noreferrer"
                         >
@@ -833,19 +821,7 @@ export default function IssuePage() {
           <Card className="bg-[#292f36] border-[#515b65] rounded-lg shadow-lg">
             <CardHeader className="p-6">
               <CardTitle className="flex items-center gap-2 text-xl">
-                <div className="relative h-6 w-6">
-                  <div
-                    className="absolute inset-0 h-6 w-6"
-                    style={{
-                      background: "linear-gradient(-45deg, #f3c9a4, #3ac8bd, #f3c9a4, #3ac8bd)",
-                      backgroundSize: "400% 400%",
-                      animation: "gradient-x 6s ease infinite",
-                      WebkitMask: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'%3E%3Cpath d='M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.582a.5.5 0 0 1 0 .963L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z'/%3E%3Cpath d='M20 3v4'/%3E%3Cpath d='M22 5h-4'/%3E%3Cpath d='M4 17v2'/%3E%3Cpath d='M5 18H3'/%3E%3C/svg%3E\") center/contain no-repeat",
-                      mask: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'%3E%3Cpath d='M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.582a.5.5 0 0 1 0 .963L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z'/%3E%3Cpath d='M20 3v4'/%3E%3Cpath d='M22 5h-4'/%3E%3Cpath d='M4 17v2'/%3E%3Cpath d='M5 18H3'/%3E%3C/svg%3E\") center/contain no-repeat",
-                    }}
-                  />
-                </div>
-                <span className="bg-gradient-to-r from-[#f3c9a4] to-[#3ac8bd] bg-clip-text text-transparent bg-size-200 animate-gradient-x font-semibold">
+                <span className="text-[#0b84ff] font-semibold">
                   AI Issue Assistant
                 </span>
               </CardTitle>
@@ -858,7 +834,7 @@ export default function IssuePage() {
               <div className="space-y-6 mb-8 custom-scrollbar relative">
                 {messages.length === 0 && (
                   <div className="flex justify-start">
-                    <div className="max-w-[80%] rounded-lg p-4 bg-gradient-to-r from-[#292f36] to-[#f3c9a4]/5 border border-[#515b65] shadow-md">
+                    <div className="max-w-[80%] rounded-lg p-4 bg-[#292f36] border border-[#515b65] text-[#f3f3f3] shadow-md">
                       <div className="prose prose-md3 max-w-none">
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
@@ -930,7 +906,7 @@ export default function IssuePage() {
                             ),
                             li: ({ children }) => <li className="text-[#f3f3f3]">{children}</li>,
                             blockquote: ({ children }) => (
-                              <blockquote className="border-l-4 border-[#f3c9a4] pl-4 italic my-4 text-[#f3f3f3]/80 bg-[#f3c9a4]/5 py-2 rounded-r">
+                              <blockquote className="border-l-4 border-[#0b84ff] pl-4 italic my-4 text-[#f3f3f3]/80 bg-[#0b84ff]/5 py-2 rounded-r">
                                 {children}
                               </blockquote>
                             ),
@@ -950,7 +926,7 @@ export default function IssuePage() {
                               return (
                                 <a
                                   href={href}
-                                  className="text-[#f3c9a4] hover:underline"
+                                  className="text-[#0b84ff] hover:underline"
                                   target="_blank"
                                   rel="noopener noreferrer"
                                 >
@@ -974,7 +950,7 @@ export default function IssuePage() {
                             td: ({ children }) => (
                               <td className="border border-[#515b65] px-4 py-3 text-[#f3f3f3]">{children}</td>
                             ),
-                            strong: ({ children }) => <strong className="font-bold text-[#f3c9a4]">{children}</strong>,
+                            strong: ({ children }) => <strong className="font-bold text-[#0b84ff]">{children}</strong>,
                             em: ({ children }) => <em className="italic text-[#f3f3f3]/90">{children}</em>,
                             hr: () => <hr className="border-[#515b65] my-6" />,
                             img: ({ src, alt }) => (
@@ -1010,8 +986,8 @@ I can help you understand this issue by searching through the codebase. Here are
                     <div
                       className={`max-w-[80%] rounded-lg p-4 ${
                         message.role === "user"
-                          ? "bg-[#f3c9a4]/20 border border-[#f3c9a4]/30 text-[#f3f3f3] shadow-sm"
-                          : "bg-gradient-to-r from-[#292f36] to-[#f3c9a4]/5 border border-[#515b65] shadow-md"
+                          ? "bg-[#0b84ff]/20 border border-[#0b84ff]/30 text-[#f3f3f3] shadow-sm"
+                          : "bg-gradient-to-r from-[#292f36] to-[#0b84ff]/5 border border-[#515b65] shadow-md"
                       }`}
                     >
                       {message.role === "assistant" ? (
@@ -1074,7 +1050,7 @@ I can help you understand this issue by searching through the codebase. Here are
                               ),
                               li: ({ children }) => <li className="ml-2 text-[#f3f3f3]">{children}</li>,
                               blockquote: ({ children }) => (
-                                <blockquote className="border-l-2 border-[#f3c9a4] pl-2 italic my-2 text-[#f3f3f3]/80">
+                                <blockquote className="border-l-2 border-[#0b84ff] pl-2 italic my-2 text-[#f3f3f3]/80">
                                   {children}
                                 </blockquote>
                               ),
@@ -1094,7 +1070,7 @@ I can help you understand this issue by searching through the codebase. Here are
                                 return (
                                   <a
                                     href={href}
-                                    className="text-[#f3c9a4] hover:underline"
+                                    className="text-[#0b84ff] hover:underline"
                                     target="_blank"
                                     rel="noopener noreferrer"
                                   >
@@ -1119,7 +1095,7 @@ I can help you understand this issue by searching through the codebase. Here are
                   <div className="flex gap-4 justify-start">
                     <div className="bg-[#292f36] border border-[#515b65] rounded-lg p-4 shadow-md">
                       <div className="flex items-center gap-2">
-                        <div className="animate-pulse text-[#f3c9a4] font-medium">Thinking...</div>
+                        <div className="animate-pulse text-[#0b84ff] font-medium">Thinking...</div>
                       </div>
                     </div>
                   </div>
@@ -1129,7 +1105,7 @@ I can help you understand this issue by searching through the codebase. Here are
                   <div className="absolute bottom-0 right-0">
                     <Button
                       onClick={skipTyping}
-                      className="bg-[#f3c9a4] hover:bg-[#d4a882] active:bg-[#c29c72] text-[#16191d] text-xs px-2 py-1 rounded-lg font-medium shadow-md hover:shadow-lg transition-all duration-200"
+                      className="bg-[#0b84ff] hover:bg-[#0066cc] active:bg-[#0052a3] text-[#16191d] text-xs px-2 py-1 rounded-lg font-medium shadow-md hover:shadow-lg transition-all duration-200"
                     >
                       Skip Generation
                     </Button>
@@ -1145,13 +1121,13 @@ I can help you understand this issue by searching through the codebase. Here are
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   placeholder="Ask about this issue... (e.g., 'How can I reproduce this bug?' or 'What's the best approach to fix this?')"
-                  className="w-full min-h-[80px] pr-16 bg-[#16191d] border-[#515b65] rounded-lg text-[#f3f3f3] placeholder:text-[#f3c9a4]/60 focus:ring-0 focus:border-[#515b65] resize-none"
+                  className="w-full min-h-[80px] pr-16 bg-[#16191d] border-[#515b65] rounded-lg text-[#f3f3f3] placeholder:text-[#515b65] focus:ring-0 focus:border-[#515b65] resize-none"
                   disabled={isGenerating}
                 />
                 <Button
                   type="submit"
                   disabled={!input.trim() || isGenerating}
-                  className="absolute right-3 bottom-3 w-10 h-10 bg-[#f3c9a4] hover:bg-[#d4a882] active:bg-[#c29c72] text-[#16191d] rounded-full font-medium shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center p-0"
+                  className="absolute right-3 bottom-3 w-10 h-10 bg-[#0b84ff] hover:bg-[#0066cc] active:bg-[#0052a3] text-[#16191d] rounded-full font-medium shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center p-0"
                 >
                   <ArrowUp className="h-5 w-5" />
                 </Button>

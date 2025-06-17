@@ -30,7 +30,7 @@ export default function FileLink({ repoId, filePath, children }: FileLinkProps) 
     <a
       href="#"
       onClick={handleClick}
-      className="text-[#f3c9a4] hover:underline cursor-pointer"
+      className="text-[#0b84ff] hover:underline cursor-pointer"
     >
       {children}
     </a>
