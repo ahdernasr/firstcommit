@@ -15,6 +15,8 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import Link from "next/link"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
+import rehypeRaw from "rehype-raw"
+import rehypeSanitize from "rehype-sanitize"
 import SyntaxHighlighter from "react-syntax-highlighter/dist/esm/prism"
 import { tomorrow } from "react-syntax-highlighter/dist/esm/styles/prism"
 import { ArrowUp } from "lucide-react"
@@ -451,6 +453,7 @@ export default function IssuePage() {
                                   <div className="prose prose-md3 max-w-none">
                                     <ReactMarkdown
                                       remarkPlugins={[remarkGfm]}
+                                      rehypePlugins={[rehypeRaw, rehypeSanitize]}
                                       components={{
                                         code({ inline, className, children, ...props }: any) {
                                           const match = /language-(\w+)/.exec(className || "")
@@ -529,6 +532,7 @@ export default function IssuePage() {
               <div className="prose prose-md3 max-w-none text-[#f3f3f3] leading-relaxed">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeRaw, rehypeSanitize]}
                   components={{
                     code({ inline, className, children, ...props }: any) {
                       const match = /language-(\w+)/.exec(className || "")
@@ -691,6 +695,7 @@ export default function IssuePage() {
               <div className="prose prose-md3 max-w-none">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeRaw, rehypeSanitize]}
                   components={{
                     code({ inline, className, children, ...props }: any) {
                       const match = /language-(\w+)/.exec(className || "")
@@ -806,6 +811,7 @@ export default function IssuePage() {
                       <div className="prose prose-md3 max-w-none">
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
+                          rehypePlugins={[rehypeRaw, rehypeSanitize]}
                           components={{
                             code({ inline, className, children, ...props }: any) {
                               const match = /language-(\w+)/.exec(className || "")
@@ -947,6 +953,7 @@ I can help you understand this issue by searching through the codebase. Here are
                         <div className="prose prose-md3 max-w-none">
                           <ReactMarkdown
                             remarkPlugins={[remarkGfm]}
+                            rehypePlugins={[rehypeRaw, rehypeSanitize]}
                             components={{
                               code({ inline, className, children, ...props }: any) {
                                 const match = /language-(\w+)/.exec(className || "")
