@@ -70,7 +70,7 @@ func (s *RAGService) GenerateResponse(ctx context.Context, req RAGRequest) (*RAG
 				"path":          "embedding",
 				"queryVector":   queryEmbedding,
 				"numCandidates": 100,
-				"limit":         10,
+				"limit":         5,
 				"similarity":    "cosine",
 				"filter":        bson.M{"repo_id": req.RepoID},
 			}},
@@ -163,81 +163,84 @@ func (s *RAGService) GenerateGuide(ctx context.Context, req RAGRequest) (*RAGRes
 
 	// Update the prompt to generate a guide
 	guidePrompt := fmt.Sprintf(`
+You are generating a first-time contributor guide for a GitHub issue using retrieval-augmented context. You will be given:
+• A GitHub issue describing a bug or feature request.
+• A list of relevant files extracted from the codebase.
 
-	You are generating a first-time contributor guide for a GitHub issue using retrieval-augmented context. You will be given:
-	•	A GitHub issue describing a bug or feature request.
-	•	A list of relevant files extracted from the codebase.
-
-Write a clear, actionable, and beginner-friendly guide to help a developer contribute confidently—even if its their first time in the repo.
-
-The guide should follow this structure:
+Write a clear, actionable, and beginner-friendly guide to help a developer confidently address this specific issue—even if it's their first time in the repository.
 
 ⸻
 
-Goal
-Summarize the issue:
-	•	What is the task (bug fix or feature)?
-	•	Why does it matter to the project or users?
+Output Requirements
+• Write in pure Markdown. Do not wrap the entire guide in %s or any fenced code block.
+• The guide must focus only on solving the issue described—not on general contribution practices.
+• Tone should be clear, direct, and confidence-building.
+• Avoid conversational or overly friendly language.
+• Do not include PR submission instructions.
+• Keep total length between 400–700 words.
+• Use 2 to 3 code snippets (in fenced code blocks using triple backticks, not indented).
 
 ⸻
 
-Files to Review
-For each file provided:
-	•	Explain what the file does in the context of the project.
-	•	Describe how it relates to the issue or implementation.
-	•	Mention important functions, components, or logic that the contributor should look at.
+Formatting Rules
+• Use level 2 headers (##) for top-level sections.
+• Use level 3 headers (###) for optional sub-sections if needed.
+• Use bullet points or numbered steps for procedures.
+• Use fenced code blocks (%[1]s) for code snippets.
+• Use block quotes (>) **only** for file paths. Do not include any description inside the quote. The description must be on the next, next line (2 lines after) with no formatting (not italicized, bold, or quoted).
+• **All bullets and numbered steps must place their description on the same line**. Example: 1. Run the test not 1.\nRun the tests.
+• You must not break to a new line after 1. or •. The description must follow immediately on the same line.
 
 ⸻
 
-How to Fix or Implement It
-Provide a step-by-step plan:
-	•	Outline where and how to make the necessary changes.
-	•	Reference specific functions or file sections where edits should occur.
-	•	Assume beginner-level familiarity with the codebase.
-	•	Be clear and precise.
-	•	Use bullet points or numbered steps when appropriate.
+Required Section Structure
 
-⸻
+Use the following exact headers and order (do not add or rename):
 
-How to Test It
-Explain how to test the fix or feature:
-	•	Mention relevant commands (e.g., npm run build, yarn test).
-	•	If manual testing is needed, describe how to reproduce the bug or verify the new feature works as intended.
-	•	Optionally mention any existing tests or testing folders if relevant.
+## Purpose of This Contribution
 
-⸻
+Clearly explain what this contribution aims to fix, improve, or introduce in direct relation to the GitHub issue. Frame it in terms of developer clarity, performance, maintainability, or correctness.
 
-Comments
-If you know anything about the issue or the codebase, you can add quick comments to the guide.
+## Context
 
-⸻
+Summarize the relevant background from the issue—prior behavior, technical gaps, or what problem the current implementation poses.
 
-Output Guidelines:
-	•	Output should be in Markdown format.
-	•	Total length should be 400–500 words.
-	•	Do not greet the user.
-	•	Avoid a conversational tone.
-	•	Do not include instructions about submitting pull requests.
-	•	Prioritize clarity, relevance, and a confidence-building tone.
-	•	Do not use emojis.
+## Files to Review
 
-Formatting Guidelines:
-	•	Use level 2 headers (##) for top-level sections like ## Goal, ## Files to Review, etc.
-	•	Use level 3 headers (###) for optional sub-sections.
-	•	Use bullet points or numbered steps where appropriate.
-	•	Use fenced code blocks (triple backticks) for code snippets.
-	•	Use Markdown block quotes (>) for file paths.
-	•	Use bold for important words.
-	
+For each file provided (make sure you include each source provided):
+> file/path/example.go  
 
-GitHub Issue: %s
+
+Explain what the file does in the context of the project. Describe how it relates to the issue or implementation. Mention important functions, components, or logic to focus on.
+
+Do not use bullet points or numbers to list the file paths. Only use block quotes for the path and unformatted text underneath for its description. This is achieved by making sure there is a blank next line between the two. 
+
+## How to Fix
+• Outline where and how to make the required changes.
+• Reference specific file paths and sections if available.
+• Use bullet points or numbered steps.
+• Assume beginner familiarity with the codebase.
+
+## How to Test
+• Describe how to verify the changes are working correctly.
+• Include any commands, scripts, or test steps.
+• Mention what successful behavior looks like.
+
+## Example
+
+(Optional) Include 1–2 relevant code snippets, logs, or output examples showing the fix in action or an expected result.
+
+## Notes
+• List any extra considerations like edge cases, performance implications, or future improvements.
+• If applicable, include known limitations or tradeoffs.
+
+GitHub Issue: %[2]s
 
 Relevant Files:
-%s
+%[3]s
 
 Write a guide that helps a junior developer contribute confidently without prior repo experience.`,
-		req.Query,
-		formatSources(resp.Sources))
+		"```", req.Query, formatSources(resp.Sources))
 
 	guide, err := s.llm.GenerateResponse(ctx, guidePrompt)
 	if err != nil {

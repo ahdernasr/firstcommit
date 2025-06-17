@@ -68,8 +68,18 @@ export default function IssuePage() {
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
   const [guide, setGuide] = useState<string>("")
   const [guideLoading, setGuideLoading] = useState(true)
+  const [isTyping, setIsTyping] = useState(false)
+  const [loadingMessage, setLoadingMessage] = useState("")
+  const [loadingStep, setLoadingStep] = useState(0)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  const loadingSteps = [
+    "Analyzing issue context and requirements...",
+    "Searching codebase for relevant implementations...",
+    "Identifying key components and dependencies...",
+    "Crafting comprehensive contribution guide..."
+  ]
 
   // Scroll to bottom whenever messages change
   const scrollToBottom = () => {
@@ -164,10 +174,48 @@ export default function IssuePage() {
     fetchGuide()
   }, [issue, params.owner, params.name])
 
+  // Handle loading message typing animation
+  useEffect(() => {
+    if (!guideLoading) return
+
+    const currentMessage = loadingSteps[loadingStep]
+    let currentText = ""
+    let charIndex = 0
+
+    const typeInterval = setInterval(() => {
+      if (charIndex < currentMessage.length) {
+        currentText += currentMessage[charIndex]
+        setLoadingMessage(currentText)
+        charIndex++
+      } else {
+        clearInterval(typeInterval)
+        // Move to next step after 5 seconds
+        setTimeout(() => {
+          if (loadingStep < loadingSteps.length - 1) {
+            setLoadingStep(prev => prev + 1)
+          }
+        }, 5000)
+      }
+    }, 30) // Typing speed
+
+    return () => clearInterval(typeInterval)
+  }, [guideLoading, loadingStep])
+
+  // Reset loading state when guide loads
+  useEffect(() => {
+    if (!guideLoading) {
+      setLoadingStep(0)
+      setLoadingMessage("")
+    }
+  }, [guideLoading])
+
   // Typing-effect: reveal one character at a time (much faster: 5ms)
   useEffect(() => {
     const lastMessage = messages[messages.length - 1]
-    if (!lastMessage || lastMessage.role !== "assistant") return
+    if (!lastMessage || lastMessage.role !== "assistant") {
+      setIsTyping(false)
+      return
+    }
 
     const fullContent = lastMessage.content
     const id = lastMessage.id
@@ -183,10 +231,31 @@ export default function IssuePage() {
         setShouldAutoScroll(true)
         // Scroll after each character is added
         scrollToBottom()
-      }, 1) // *** FAST TYPING: 1ms ***
+      }, 0.01) // *** FAST TYPING: 1ms ***
       return () => clearTimeout(timer)
+    } else {
+      setIsTyping(false)
     }
-  }, [messages, displayedContent, shouldAutoScroll])
+  }, [messages, displayedContent])
+
+  // Set isTyping when a new assistant message is added
+  useEffect(() => {
+    const lastMessage = messages[messages.length - 1]
+    if (lastMessage?.role === "assistant") {
+      setIsTyping(true)
+    }
+  }, [messages])
+
+  const skipTyping = () => {
+    const lastMessage = messages[messages.length - 1]
+    if (!lastMessage || lastMessage.role !== "assistant") return
+
+    setDisplayedContent((prev) => ({
+      ...prev,
+      [lastMessage.id]: lastMessage.content,
+    }))
+    setIsTyping(false)
+  }
 
   // Detect when user scrolls away from bottom to disable auto-scroll
   useEffect(() => {
@@ -319,7 +388,7 @@ export default function IssuePage() {
 
         {/* Issue Details */}
         <Card className="mb-12 bg-[#292f36] border-[#515b65] rounded-lg shadow-lg">
-          <CardHeader className="p-6">
+          <CardHeader className="p-6 pb-0">
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <CardTitle className="text-3xl mb-4 text-[#f3f3f3] font-bold leading-tight">
@@ -455,7 +524,7 @@ export default function IssuePage() {
           </CardHeader>
 
           {issue.body && (
-            <CardContent className="p-6">
+            <CardContent className="p-6 pt-0">
               <div className="prose prose-md3 max-w-none text-[#f3f3f3] leading-relaxed">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
@@ -565,7 +634,7 @@ export default function IssuePage() {
 
         {/* Guide Section */}
         <Card className="mb-12 bg-[#292f36] border-[#515b65] rounded-lg shadow-lg">
-          <CardHeader className="p-6">
+          <CardHeader className="p-6 pb-0">
             <CardTitle className="flex items-center gap-2 text-xl">
               <div className="relative h-6 w-6">
                 <div
@@ -583,18 +652,25 @@ export default function IssuePage() {
                 First-Time Contributor Guide
               </span>
             </CardTitle>
-            <CardDescription className="text-[#f3f3f3]/60">
-              A beginner-friendly guide to help you understand and contribute to this issue
-            </CardDescription>
           </CardHeader>
-          <CardContent className="p-6">
+          <CardContent className="p-6 pt-3">
             {guideLoading ? (
-              <div className="space-y-4">
-                <Skeleton className="h-4 w-3/4 bg-[#515b65]" />
-                <Skeleton className="h-4 w-full bg-[#515b65]" />
-                <Skeleton className="h-4 w-5/6 bg-[#515b65]" />
-                <Skeleton className="h-4 w-4/6 bg-[#515b65]" />
-                <Skeleton className="h-4 w-3/4 bg-[#515b65]" />
+              <div className="space-y-6">
+                <div className="flex items-center gap-3">
+                  <div className="h-4 w-4 relative">
+                    <div className="absolute inset-0 h-4 w-4 rounded-full border-2 border-[#f3c9a4] border-t-transparent animate-spin" />
+                  </div>
+                  <div className="text-[#f3f3f3]/60 font-medium">
+                    {loadingMessage}
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  <Skeleton className="h-4 w-3/4 bg-[#515b65]" />
+                  <Skeleton className="h-4 w-full bg-[#515b65]" />
+                  <Skeleton className="h-4 w-5/6 bg-[#515b65]" />
+                  <Skeleton className="h-4 w-4/6 bg-[#515b65]" />
+                  <Skeleton className="h-4 w-3/4 bg-[#515b65]" />
+                </div>
               </div>
             ) : (
               <div className="prose prose-md3 max-w-none">
@@ -668,171 +744,36 @@ export default function IssuePage() {
         <Separator className="mb-12 bg-[#515b65]" />
 
         {/* AI Chat Interface */}
-        <Card className="bg-[#292f36] border-[#515b65] rounded-lg shadow-lg">
-          <CardHeader className="p-6">
-            <CardTitle className="flex items-center gap-2 text-xl">
-              {/* Fixed sparkles icon with proper SVG mask */}
-              <div className="relative h-6 w-6">
-                <div
-                  className="absolute inset-0 h-6 w-6"
-                  style={{
-                    background: "linear-gradient(-45deg, #f3c9a4, #3ac8bd, #f3c9a4, #3ac8bd)",
-                    backgroundSize: "400% 400%",
-                    animation: "gradient-x 6s ease infinite",
-                    WebkitMask:
-                      "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'%3E%3Cpath d='M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.582a.5.5 0 0 1 0 .963L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z'/%3E%3Cpath d='M20 3v4'/%3E%3Cpath d='M22 5h-4'/%3E%3Cpath d='M4 17v2'/%3E%3Cpath d='M5 18H3'/%3E%3C/svg%3E\") center/contain no-repeat",
-                    mask: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'%3E%3Cpath d='M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.582a.5.5 0 0 1 0 .963L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z'/%3E%3Cpath d='M20 3v4'/%3E%3Cpath d='M22 5h-4'/%3E%3Cpath d='M4 17v2'/%3E%3Cpath d='M5 18H3'/%3E%3C/svg%3E\") center/contain no-repeat",
-                  }}
-                />
-              </div>
-
-              {/* Apply the same "button gradient" as text via bg-clip */}
-              <span
-                className="
-                  bg-gradient-to-r 
-                  from-[#f3c9a4] to-[#3ac8bd] 
-                  bg-clip-text text-transparent 
-                  bg-size-200 animate-gradient-x
-                  font-semibold
-                "
-              >
-                AI Issue Assistant
-              </span>
-            </CardTitle>
-            <CardDescription className="text-[#f3f3f3]/60">
-              Get AI-powered guidance and code examples for this issue
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-6">
-            {/* Messages */}
-            <div className="space-y-6 mb-8 custom-scrollbar">
-              {messages.length === 0 && (
-                <div className="flex justify-start">
-                  <div className="max-w-[80%] rounded-lg p-4 bg-gradient-to-r from-[#292f36] to-[#f3c9a4]/5 border border-[#515b65] shadow-md">
-                    <div className="prose prose-md3 max-w-none">
-                      <ReactMarkdown components={{
-                    code({ inline, className, children, ...props }: any) {
-                      const match = /language-(\w+)/.exec(className || "")
-                      const isInline = inline && !match // Treat as inline if explicitly inline and not a code block
-
-                      if (isInline) {
-                        // Render inline code without SyntaxHighlighter
-                        return <code className={className} {...props}>{children}</code>
-                      }
-
-                      return match ? (
-                        <SyntaxHighlighter
-                          style={tomorrow}
-                          language={match[1]}
-                          PreTag="div"
-                          {...props}
-                        >
-                          {String(children).replace(/\n$/, "")}
-                        </SyntaxHighlighter>
-                      ) : (
-                        <code className={className} {...props}>
-                          {children}
-                        </code>
-                      )
-                    },
-                    pre: ({ children }) => (
-                      <pre className="bg-[#16191d] border border-[#515b65] rounded-lg p-4 overflow-x-auto my-4">
-                        {children}
-                      </pre>
-                    ),
-                    h1: ({ children }) => (
-                      <h1 className="text-2xl font-bold mb-4 text-[#f3f3f3] border-b border-[#515b65] pb-2">
-                        {children}
-                      </h1>
-                    ),
-                    h2: ({ children }) => (
-                      <h2 className="text-xl font-semibold mb-3 text-[#f3f3f3] mt-6">{children}</h2>
-                    ),
-                    h3: ({ children }) => <h3 className="text-lg font-medium mb-2 text-[#f3f3f3] mt-4">{children}</h3>,
-                    h4: ({ children }) => (
-                      <h4 className="text-base font-medium mb-2 text-[#f3f3f3] mt-3">{children}</h4>
-                    ),
-                    h5: ({ children }) => <h5 className="text-sm font-medium mb-2 text-[#f3f3f3] mt-3">{children}</h5>,
-                    h6: ({ children }) => <h6 className="text-sm font-medium mb-2 text-[#f3f3f3] mt-3">{children}</h6>,
-                    p: ({ children }) => <p className="mb-4 leading-relaxed text-[#f3f3f3]">{children}</p>,
-                    ul: ({ children }) => (
-                      <ul className="list-disc list-inside mb-4 space-y-2 text-[#f3f3f3] ml-4">{children}</ul>
-                    ),
-                    ol: ({ children }) => (
-                      <ol className="list-decimal list-inside mb-4 space-y-2 text-[#f3f3f3] ml-4">{children}</ol>
-                    ),
-                    li: ({ children }) => <li className="text-[#f3f3f3]">{children}</li>,
-                    blockquote: ({ children }) => (
-                      <blockquote className="border-l-4 border-[#f3c9a4] pl-4 italic my-4 text-[#f3f3f3]/80 bg-[#f3c9a4]/5 py-2 rounded-r">
-                        {children}
-                      </blockquote>
-                    ),
-                    a: ({ href, children }) => (
-                      <a
-                        href={href}
-                        className="text-[#f3c9a4] hover:text-[#3ac8bd] underline transition-colors"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {children}
-                      </a>
-                    ),
-                    table: ({ children }) => (
-                      <div className="overflow-x-auto my-4">
-                        <table className="min-w-full border border-[#515b65] rounded-lg">{children}</table>
-                      </div>
-                    ),
-                    thead: ({ children }) => <thead className="bg-[#292f36]">{children}</thead>,
-                    tbody: ({ children }) => <tbody>{children}</tbody>,
-                    tr: ({ children }) => <tr className="border-b border-[#515b65]">{children}</tr>,
-                    th: ({ children }) => (
-                      <th className="border border-[#515b65] px-4 py-3 bg-[#292f36] font-semibold text-left text-[#f3f3f3]">
-                        {children}
-                      </th>
-                    ),
-                    td: ({ children }) => (
-                      <td className="border border-[#515b65] px-4 py-3 text-[#f3f3f3]">{children}</td>
-                    ),
-                    strong: ({ children }) => <strong className="font-bold text-[#f3c9a4]">{children}</strong>,
-                    em: ({ children }) => <em className="italic text-[#f3f3f3]/90">{children}</em>,
-                    hr: () => <hr className="border-[#515b65] my-6" />,
-                    img: ({ src, alt }) => (
-                      <img
-                        src={src || "/placeholder.svg"}
-                        alt={alt || ""}
-                        className="max-w-full h-auto rounded-lg border border-[#515b65] my-4"
-                      />
-                    ),
-                  }} remarkPlugins={[remarkGfm]}>
-                        {`# Welcome to the AI Issue Assistant
-
-I can help you understand this issue by searching through the codebase. Here are some examples of what you can ask:
-
-- How is this feature implemented in the code?
-- Where are the relevant files for this issue?
-- Can you show me the code that handles this functionality?
-- What are the dependencies and imports needed for this feature?
-
-**Try asking a question to get started!**`}
-                      </ReactMarkdown>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex gap-4 ${message.role === "user" ? "justify-end pr-2" : "justify-start"}`}
-                >
+        {!guideLoading && (
+          <Card className="bg-[#292f36] border-[#515b65] rounded-lg shadow-lg">
+            <CardHeader className="p-6">
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <div className="relative h-6 w-6">
                   <div
-                    className={`max-w-[80%] rounded-lg p-4 ${
-                      message.role === "user"
-                        ? "bg-[#f3c9a4]/20 border border-[#f3c9a4]/30 text-[#f3f3f3] shadow-sm"
-                        : "bg-gradient-to-r from-[#292f36] to-[#f3c9a4]/5 border border-[#515b65] shadow-md"
-                    }`}
-                  >
-                    {message.role === "assistant" ? (
+                    className="absolute inset-0 h-6 w-6"
+                    style={{
+                      background: "linear-gradient(-45deg, #f3c9a4, #3ac8bd, #f3c9a4, #3ac8bd)",
+                      backgroundSize: "400% 400%",
+                      animation: "gradient-x 6s ease infinite",
+                      WebkitMask: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'%3E%3Cpath d='M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.582a.5.5 0 0 1 0 .963L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z'/%3E%3Cpath d='M20 3v4'/%3E%3Cpath d='M22 5h-4'/%3E%3Cpath d='M4 17v2'/%3E%3Cpath d='M5 18H3'/%3E%3C/svg%3E\") center/contain no-repeat",
+                      mask: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'%3E%3Cpath d='M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.582a.5.5 0 0 1 0 .963L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z'/%3E%3Cpath d='M20 3v4'/%3E%3Cpath d='M22 5h-4'/%3E%3Cpath d='M4 17v2'/%3E%3Cpath d='M5 18H3'/%3E%3C/svg%3E\") center/contain no-repeat",
+                    }}
+                  />
+                </div>
+                <span className="bg-gradient-to-r from-[#f3c9a4] to-[#3ac8bd] bg-clip-text text-transparent bg-size-200 animate-gradient-x font-semibold">
+                  AI Issue Assistant
+                </span>
+              </CardTitle>
+              <CardDescription className="text-[#f3f3f3]/60">
+                Get AI-powered guidance and code examples for this issue
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-6">
+              {/* Messages */}
+              <div className="space-y-6 mb-8 custom-scrollbar relative">
+                {messages.length === 0 && (
+                  <div className="flex justify-start">
+                    <div className="max-w-[80%] rounded-lg p-4 bg-gradient-to-r from-[#292f36] to-[#f3c9a4]/5 border border-[#515b65] shadow-md">
                       <div className="prose prose-md3 max-w-none">
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
@@ -861,81 +802,220 @@ I can help you understand this issue by searching through the codebase. Here are
                                 </code>
                               )
                             },
-                            h1: ({ children }) => <h1 className="text-lg font-bold mb-2 text-[#f3f3f3]">{children}</h1>,
+                            pre: ({ children }) => (
+                              <pre className="bg-[#16191d] border border-[#515b65] rounded-lg p-4 overflow-x-auto my-4">
+                                {children}
+                              </pre>
+                            ),
+                            h1: ({ children }) => (
+                              <h1 className="text-2xl font-bold mb-4 text-[#f3f3f3] border-b border-[#515b65] pb-2">
+                                {children}
+                              </h1>
+                            ),
                             h2: ({ children }) => (
-                              <h2 className="text-base font-semibold mb-2 text-[#f3f3f3]">{children}</h2>
+                              <h2 className="text-xl font-semibold mb-3 text-[#f3f3f3] mt-6">{children}</h2>
                             ),
-                            h3: ({ children }) => (
-                              <h3 className="text-sm font-medium mb-1 text-[#f3f3f3]">{children}</h3>
+                            h3: ({ children }) => <h3 className="text-lg font-medium mb-2 text-[#f3f3f3] mt-4">{children}</h3>,
+                            h4: ({ children }) => (
+                              <h4 className="text-base font-medium mb-2 text-[#f3f3f3] mt-3">{children}</h4>
                             ),
-                            p: ({ children }) => <p className="mb-2 leading-relaxed text-[#f3f3f3]">{children}</p>,
+                            h5: ({ children }) => <h5 className="text-sm font-medium mb-2 text-[#f3f3f3] mt-3">{children}</h5>,
+                            h6: ({ children }) => <h6 className="text-sm font-medium mb-2 text-[#f3f3f3] mt-3">{children}</h6>,
+                            p: ({ children }) => <p className="mb-4 leading-relaxed text-[#f3f3f3]">{children}</p>,
                             ul: ({ children }) => (
-                              <ul className="list-disc list-inside mb-2 space-y-1 text-[#f3f3f3]">{children}</ul>
+                              <ul className="list-disc list-inside mb-4 space-y-2 text-[#f3f3f3] ml-4">{children}</ul>
                             ),
                             ol: ({ children }) => (
-                              <ol className="list-decimal list-inside mb-2 space-y-1 text-[#f3f3f3]">{children}</ol>
+                              <ol className="list-decimal list-inside mb-4 space-y-2 text-[#f3f3f3] ml-4">{children}</ol>
                             ),
-                            li: ({ children }) => <li className="ml-2 text-[#f3f3f3]">{children}</li>,
+                            li: ({ children }) => <li className="text-[#f3f3f3]">{children}</li>,
                             blockquote: ({ children }) => (
-                              <blockquote className="border-l-2 border-[#f3c9a4] pl-2 italic my-2 text-[#f3f3f3]/80">
+                              <blockquote className="border-l-4 border-[#f3c9a4] pl-4 italic my-4 text-[#f3f3f3]/80 bg-[#f3c9a4]/5 py-2 rounded-r">
                                 {children}
                               </blockquote>
                             ),
                             a: ({ href, children }) => (
                               <a
                                 href={href}
-                                className="text-[#f3c9a4] hover:underline"
+                                className="text-[#f3c9a4] hover:text-[#3ac8bd] underline transition-colors"
                                 target="_blank"
                                 rel="noopener noreferrer"
                               >
                                 {children}
                               </a>
                             ),
+                            table: ({ children }) => (
+                              <div className="overflow-x-auto my-4">
+                                <table className="min-w-full border border-[#515b65] rounded-lg">{children}</table>
+                              </div>
+                            ),
+                            thead: ({ children }) => <thead className="bg-[#292f36]">{children}</thead>,
+                            tbody: ({ children }) => <tbody>{children}</tbody>,
+                            tr: ({ children }) => <tr className="border-b border-[#515b65]">{children}</tr>,
+                            th: ({ children }) => (
+                              <th className="border border-[#515b65] px-4 py-3 bg-[#292f36] font-semibold text-left text-[#f3f3f3]">
+                                {children}
+                              </th>
+                            ),
+                            td: ({ children }) => (
+                              <td className="border border-[#515b65] px-4 py-3 text-[#f3f3f3]">{children}</td>
+                            ),
+                            strong: ({ children }) => <strong className="font-bold text-[#f3c9a4]">{children}</strong>,
+                            em: ({ children }) => <em className="italic text-[#f3f3f3]/90">{children}</em>,
+                            hr: () => <hr className="border-[#515b65] my-6" />,
+                            img: ({ src, alt }) => (
+                              <img
+                                src={src || "/placeholder.svg"}
+                                alt={alt || ""}
+                                className="max-w-full h-auto rounded-lg border border-[#515b65] my-4"
+                              />
+                            ),
                           }}
                         >
-                          {/* Render the typed portion if it exists; otherwise empty */}
-                          {displayedContent[message.id] ?? ""}
+                          {`# Welcome to the AI Issue Assistant
+
+I can help you understand this issue by searching through the codebase. Here are some examples of what you can ask:
+
+- How is this feature implemented in the code?
+- Where are the relevant files for this issue?
+- Can you show me the code that handles this functionality?
+- What are the dependencies and imports needed for this feature?
+
+**Try asking a question to get started!**`}
                         </ReactMarkdown>
                       </div>
-                    ) : (
-                      <p className="leading-relaxed text-[#f3f3f3]">{message.content}</p>
-                    )}
-                  </div>
-                </div>
-              ))}
-
-              {isGenerating && (
-                <div className="flex gap-4 justify-start">
-                  <div className="bg-[#292f36] border border-[#515b65] rounded-lg p-4 shadow-md">
-                    <div className="flex items-center gap-2">
-                      <div className="animate-pulse text-[#f3c9a4] font-medium">Thinking...</div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              <div ref={messagesEndRef} />
-            </div>
+                {messages.map((message) => (
+                  <div
+                    key={message.id}
+                    className={`flex gap-4 ${message.role === "user" ? "justify-end pr-2" : "justify-start"}`}
+                  >
+                    <div
+                      className={`max-w-[80%] rounded-lg p-4 ${
+                        message.role === "user"
+                          ? "bg-[#f3c9a4]/20 border border-[#f3c9a4]/30 text-[#f3f3f3] shadow-sm"
+                          : "bg-gradient-to-r from-[#292f36] to-[#f3c9a4]/5 border border-[#515b65] shadow-md"
+                      }`}
+                    >
+                      {message.role === "assistant" ? (
+                        <div className="prose prose-md3 max-w-none">
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              code({ inline, className, children, ...props }: any) {
+                                const match = /language-(\w+)/.exec(className || "")
+                                const isInline = inline && !match // Treat as inline if explicitly inline and not a code block
 
-            {/* Input Form */}
-            <form onSubmit={handleSubmit} className="relative w-full">
-              <Textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask about this issue... (e.g., 'How can I reproduce this bug?' or 'What's the best approach to fix this?')"
-                className="w-full min-h-[80px] pr-16 bg-[#16191d] border-[#515b65] rounded-lg text-[#f3f3f3] placeholder:text-[#f3c9a4]/60 focus:ring-0 focus:border-[#515b65] resize-none"
-                disabled={isGenerating}
-              />
-              <Button
-                type="submit"
-                disabled={!input.trim() || isGenerating}
-                className="absolute right-3 bottom-3 w-10 h-10 bg-[#f3c9a4] hover:bg-[#d4a882] active:bg-[#c29c72] text-[#16191d] rounded-full font-medium shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center p-0"
-              >
-                <ArrowUp className="h-5 w-5" />
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+                                if (isInline) {
+                                  // Render inline code without SyntaxHighlighter
+                                  return <code className={className} {...props}>{children}</code>
+                                }
+
+                                return match ? (
+                                  <SyntaxHighlighter
+                                    style={tomorrow}
+                                    language={match[1]}
+                                    PreTag="div"
+                                    {...props}
+                                  >
+                                    {String(children).replace(/\n$/, "")}
+                                  </SyntaxHighlighter>
+                                ) : (
+                                  <code className={className} {...props}>
+                                    {children}
+                                  </code>
+                                )
+                              },
+                              h1: ({ children }) => <h1 className="text-lg font-bold mb-2 text-[#f3f3f3]">{children}</h1>,
+                              h2: ({ children }) => (
+                                <h2 className="text-base font-semibold mb-2 text-[#f3f3f3]">{children}</h2>
+                              ),
+                              h3: ({ children }) => (
+                                <h3 className="text-sm font-medium mb-1 text-[#f3f3f3]">{children}</h3>
+                              ),
+                              p: ({ children }) => <p className="mb-2 leading-relaxed text-[#f3f3f3]">{children}</p>,
+                              ul: ({ children }) => (
+                                <ul className="list-disc list-inside mb-2 space-y-1 text-[#f3f3f3]">{children}</ul>
+                              ),
+                              ol: ({ children }) => (
+                                <ol className="list-decimal list-inside mb-2 space-y-1 text-[#f3f3f3]">{children}</ol>
+                              ),
+                              li: ({ children }) => <li className="ml-2 text-[#f3f3f3]">{children}</li>,
+                              blockquote: ({ children }) => (
+                                <blockquote className="border-l-2 border-[#f3c9a4] pl-2 italic my-2 text-[#f3f3f3]/80">
+                                  {children}
+                                </blockquote>
+                              ),
+                              a: ({ href, children }) => (
+                                <a
+                                  href={href}
+                                  className="text-[#f3c9a4] hover:underline"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  {children}
+                                </a>
+                              ),
+                            }}
+                          >
+                            {/* Render the typed portion if it exists; otherwise empty */}
+                            {displayedContent[message.id] ?? ""}
+                          </ReactMarkdown>
+                        </div>
+                      ) : (
+                        <p className="leading-relaxed text-[#f3f3f3]">{message.content}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {isGenerating && (
+                  <div className="flex gap-4 justify-start">
+                    <div className="bg-[#292f36] border border-[#515b65] rounded-lg p-4 shadow-md">
+                      <div className="flex items-center gap-2">
+                        <div className="animate-pulse text-[#f3c9a4] font-medium">Thinking...</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {isTyping && (
+                  <div className="absolute bottom-0 right-0">
+                    <Button
+                      onClick={skipTyping}
+                      className="bg-[#f3c9a4] hover:bg-[#d4a882] active:bg-[#c29c72] text-[#16191d] text-xs px-2 py-1 rounded-lg font-medium shadow-md hover:shadow-lg transition-all duration-200"
+                    >
+                      Skip Generation
+                    </Button>
+                  </div>
+                )}
+
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Input Form */}
+              <form onSubmit={handleSubmit} className="relative w-full">
+                <Textarea
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="Ask about this issue... (e.g., 'How can I reproduce this bug?' or 'What's the best approach to fix this?')"
+                  className="w-full min-h-[80px] pr-16 bg-[#16191d] border-[#515b65] rounded-lg text-[#f3f3f3] placeholder:text-[#f3c9a4]/60 focus:ring-0 focus:border-[#515b65] resize-none"
+                  disabled={isGenerating}
+                />
+                <Button
+                  type="submit"
+                  disabled={!input.trim() || isGenerating}
+                  className="absolute right-3 bottom-3 w-10 h-10 bg-[#f3c9a4] hover:bg-[#d4a882] active:bg-[#c29c72] text-[#16191d] rounded-full font-medium shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center p-0"
+                >
+                  <ArrowUp className="h-5 w-5" />
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   )
