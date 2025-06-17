@@ -3,10 +3,13 @@ package repository
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"sort"
+	"strings"
 	"sync"
 
+	"cloud.google.com/go/storage"
 	"github.com/ahmednasr/ai-in-action/server/internal/models"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -30,10 +33,11 @@ type RepoMongo struct {
 	metaColl          *mongo.Collection // repos_meta collection from primary DB (for repository embeddings)
 	codeColl          *mongo.Collection // repos_code collection from primary DB (for code chunks)
 	federatedMetaColl *mongo.Collection // repos collection from federated DB (for full metadata)
+	storageClient     *storage.Client
 }
 
 // NewRepoRepository creates a new MongoDB repository instance.
-func NewRepoRepository(primaryDB, federatedDB *mongo.Database) (*RepoMongo, error) {
+func NewRepoRepository(primaryDB, federatedDB *mongo.Database, storageClient *storage.Client) (*RepoMongo, error) {
 	// Verify repos_meta collection exists in primaryDB
 	collections, err := primaryDB.ListCollectionNames(context.Background(), bson.M{})
 	if err != nil {
@@ -89,6 +93,7 @@ func NewRepoRepository(primaryDB, federatedDB *mongo.Database) (*RepoMongo, erro
 		metaColl:          primaryDB.Collection("repos_meta"),
 		codeColl:          primaryDB.Collection("repos_code"),
 		federatedMetaColl: federatedDB.Collection("repos_meta"),
+		storageClient:     storageClient,
 	}, nil
 }
 
@@ -385,4 +390,48 @@ func (r *RepoMongo) GetAllRepos(ctx context.Context) ([]models.Repo, error) {
 		return nil, fmt.Errorf("failed to decode repositories: %w", err)
 	}
 	return repos, nil
+}
+
+// GetFileContent retrieves the content of a file from the GCS bucket.
+func (r *RepoMongo) GetFileContent(ctx context.Context, repoID string, filePath string) (string, error) {
+	// Extract owner and repo name from the filePath
+	parts := strings.SplitN(filePath, "/", 2)
+	if len(parts) != 2 {
+		log.Printf("Invalid file path format - FilePath: %s", filePath)
+		return "", fmt.Errorf("invalid file path format: %s", filePath)
+	}
+
+	// Construct the normalized repoID (owner--repo)
+	normalizedRepoID := fmt.Sprintf("%s--%s", repoID, parts[0])
+	// Get the rest of the file path
+	restOfPath := parts[1]
+
+	// Construct the full GCS path
+	fullPath := fmt.Sprintf("input/repos/%s/%s", normalizedRepoID, restOfPath)
+
+	// Log the exact GCS path being accessed
+	log.Printf("Accessing GCS bucket:\nBucket: ai-in-action-repo-bucket\nPath: %s", fullPath)
+
+	// Get the object from GCS
+	obj := r.storageClient.Bucket("ai-in-action-repo-bucket").Object(fullPath)
+	reader, err := obj.NewReader(ctx)
+	if err != nil {
+		if err == storage.ErrObjectNotExist {
+			log.Printf("File not found in GCS bucket - Path: %s", fullPath)
+			return "", fmt.Errorf("file not found: %s in repo %s", filePath, repoID)
+		}
+		log.Printf("GCS error while reading file - Path: %s, Error: %v", fullPath, err)
+		return "", fmt.Errorf("failed to read file: %w", err)
+	}
+	defer reader.Close()
+
+	// Read the content
+	content, err := io.ReadAll(reader)
+	if err != nil {
+		log.Printf("Error reading file content - Path: %s, Error: %v", fullPath, err)
+		return "", fmt.Errorf("failed to read file content: %w", err)
+	}
+
+	log.Printf("Successfully read file from GCS - Path: %s", fullPath)
+	return string(content), nil
 }

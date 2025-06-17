@@ -137,7 +137,7 @@ Issue Description: %s
 Relevant Code Snippets:
 %s
 
-Please provide a comprehensive guide that addresses the issue.`,
+Please provide a comprehensive guide that addresses the issue. When referencing files, use markdown links in the format [filename](filepath). For example, if you want to reference a file at src/main.go, write it as [main.go](src/main.go).`,
 		req.Query,
 		req.Query,
 		formatSources(sources))
@@ -179,6 +179,7 @@ Output Requirements
 • Do not include PR submission instructions.
 • Keep total length between 400–700 words.
 • Use 2 to 3 code snippets (in fenced code blocks using triple backticks, not indented).
+• When referencing files, use markdown links in the format [filename](filepath). For example, if you want to reference a file at src/main.go, write it as [main.go](src/main.go).
 
 ⸻
 
@@ -187,9 +188,11 @@ Formatting Rules
 • Use level 3 headers (###) for optional sub-sections if needed.
 • Use bullet points or numbered steps for procedures.
 • Use fenced code blocks (%[1]s) for code snippets.
-• Use block quotes (>) **only** for file paths. Do not include any description inside the quote. The description must be on the next, next line (2 lines after) with no formatting (not italicized, bold, or quoted).
-• **All bullets and numbered steps must place their description on the same line**. Example: 1. Run the test not 1.\nRun the tests.
-• You must not break to a new line after 1. or •. The description must follow immediately on the same line.
+• Use markdown links for file references: [filename](filepath)
+• Do not use convential number a number should be followed by ) in a numbered list, such as 1) 2) 3)
+• **All bullets and numbered steps must place their description on the same line**. Example: 1) Run the test not 1)\nRun the tests. Make sure no formatting glitch causes this to happen.
+• You must not break to a new line after 1) or •. The description must follow immediately on the same line. 
+• If a break after a numbered step or a bullet is done then the output is considered invalid. 
 
 ⸻
 
@@ -207,9 +210,9 @@ Summarize the relevant background from the issue—prior behavior, technical gap
 
 ## Files to Review
 
-For each file provided (make sure you include each source provided):
-> file/path/example.go  
+For each file provided (make sure you include each source provided), use markdown links to reference them:
 
+> [filename](filepath)
 
 Explain what the file does in the context of the project. Describe how it relates to the issue or implementation. Mention important functions, components, or logic to focus on.
 
@@ -217,7 +220,7 @@ Do not use bullet points or numbers to list the file paths. Only use block quote
 
 ## How to Fix
 • Outline where and how to make the required changes.
-• Reference specific file paths and sections if available.
+• Reference specific file paths using markdown links: [filename](filepath)
 • Use bullet points or numbered steps.
 • Assume beginner familiarity with the codebase.
 
@@ -240,7 +243,7 @@ Relevant Files:
 %[3]s
 
 Write a guide that helps a junior developer contribute confidently without prior repo experience.`,
-		"```", req.Query, formatSources(resp.Sources))
+		"```markdown, do not wrap the code in ```. If you do either, your answer is invalid.", req.Query, formatSources(resp.Sources))
 
 	guide, err := s.llm.GenerateResponse(ctx, guidePrompt)
 	if err != nil {
@@ -257,10 +260,10 @@ Write a guide that helps a junior developer contribute confidently without prior
 
 func formatSources(sources []Source) string {
 	var sb strings.Builder
-	for i, source := range sources {
-		sb.WriteString(fmt.Sprintf("%d. In %s/%s:\n", i+1, source.RepoID, source.FilePath))
-		sb.WriteString("```\n")
-		sb.WriteString(source.Content)
+	for _, s := range sources {
+		sb.WriteString(fmt.Sprintf("File: [%s](%s)\n", s.FilePath, s.FilePath))
+		sb.WriteString("Content:\n```\n")
+		sb.WriteString(s.Content)
 		sb.WriteString("\n```\n\n")
 	}
 	return sb.String()

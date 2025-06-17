@@ -14,6 +14,7 @@ func RegisterRoutes(app *fiber.App,
 	repoRepository service.RepoRepository,
 	metadataEmbedder service.EmbeddingClient,
 	codeEmbedder service.EmbeddingClient,
+	codeSvc service.CodeService,
 ) {
 
 	v1 := app.Group("/api/v1")
@@ -21,5 +22,5 @@ func RegisterRoutes(app *fiber.App,
 	NewRepoHandler(repoSvc).Register(v1)
 	NewGuideHandler(guideSvc).Register(v1)
 	NewChatHandler(chatSvc).Register(v1)
-	NewCodeSearchHandler(repoRepository, codeEmbedder).Register(v1)
+	NewCodeSearchHandler(repoRepository, codeEmbedder, codeSvc).Register(v1)
 }

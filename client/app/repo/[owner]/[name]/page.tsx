@@ -100,7 +100,11 @@ export default function RepoPage() {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
       const data = await response.json()
-      setIssues(data)
+
+      // Filter out pull requests
+      const onlyIssues = data.filter((item: any) => !item.pull_request)
+
+      setIssues(onlyIssues)
     } catch (error) {
       console.error("Error fetching issues:", error)
       setIssues([])

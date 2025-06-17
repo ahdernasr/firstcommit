@@ -19,6 +19,7 @@ import SyntaxHighlighter from "react-syntax-highlighter/dist/esm/prism"
 import { tomorrow } from "react-syntax-highlighter/dist/esm/styles/prism"
 import { ArrowUp } from "lucide-react"
 import { getApiEndpoint } from '@/lib/config'
+import FileLink from '@/app/components/FileLink'
 
 interface Issue {
   id: number
@@ -585,16 +586,30 @@ export default function IssuePage() {
                         {children}
                       </blockquote>
                     ),
-                    a: ({ href, children }) => (
-                      <a
-                        href={href}
-                        className="text-[#f3c9a4] hover:text-[#3ac8bd] underline transition-colors"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {children}
-                      </a>
-                    ),
+                    a: ({ href, children }) => {
+                      // Check if the link is a file reference (e.g., src/file.txt)
+                      if (href && !href.startsWith('http')) {
+                        return (
+                          <FileLink
+                            repoId={`${params.owner}/${params.name}`}
+                            filePath={href}
+                          >
+                            {children}
+                          </FileLink>
+                        );
+                      }
+                      // Regular external links
+                      return (
+                        <a
+                          href={href}
+                          className="text-[#f3c9a4] hover:underline"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {children}
+                        </a>
+                      );
+                    },
                     table: ({ children }) => (
                       <div className="overflow-x-auto my-4">
                         <table className="min-w-full border border-[#515b65] rounded-lg">{children}</table>
@@ -722,16 +737,30 @@ export default function IssuePage() {
                         {children}
                       </blockquote>
                     ),
-                    a: ({ href, children }) => (
-                      <a
-                        href={href}
-                        className="text-[#f3c9a4] hover:text-[#3ac8bd] underline transition-colors"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {children}
-                      </a>
-                    ),
+                    a: ({ href, children }) => {
+                      // Check if the link is a file reference (e.g., src/file.txt)
+                      if (href && !href.startsWith('http')) {
+                        return (
+                          <FileLink
+                            repoId={`${params.owner}/${params.name}`}
+                            filePath={href}
+                          >
+                            {children}
+                          </FileLink>
+                        );
+                      }
+                      // Regular external links
+                      return (
+                        <a
+                          href={href}
+                          className="text-[#f3c9a4] hover:underline"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {children}
+                        </a>
+                      );
+                    },
                   }}
                 >
                   {guide}
@@ -834,16 +863,30 @@ export default function IssuePage() {
                                 {children}
                               </blockquote>
                             ),
-                            a: ({ href, children }) => (
-                              <a
-                                href={href}
-                                className="text-[#f3c9a4] hover:text-[#3ac8bd] underline transition-colors"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                {children}
-                              </a>
-                            ),
+                            a: ({ href, children }) => {
+                              // Check if the link is a file reference (e.g., src/file.txt)
+                              if (href && !href.startsWith('http')) {
+                                return (
+                                  <FileLink
+                                    repoId={`${params.owner}/${params.name}`}
+                                    filePath={href}
+                                  >
+                                    {children}
+                                  </FileLink>
+                                );
+                              }
+                              // Regular external links
+                              return (
+                                <a
+                                  href={href}
+                                  className="text-[#f3c9a4] hover:underline"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  {children}
+                                </a>
+                              );
+                            },
                             table: ({ children }) => (
                               <div className="overflow-x-auto my-4">
                                 <table className="min-w-full border border-[#515b65] rounded-lg">{children}</table>
@@ -949,16 +992,30 @@ I can help you understand this issue by searching through the codebase. Here are
                                   {children}
                                 </blockquote>
                               ),
-                              a: ({ href, children }) => (
-                                <a
-                                  href={href}
-                                  className="text-[#f3c9a4] hover:underline"
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                >
-                                  {children}
-                                </a>
-                              ),
+                              a: ({ href, children }) => {
+                                // Check if the link is a file reference (e.g., src/file.txt)
+                                if (href && !href.startsWith('http')) {
+                                  return (
+                                    <FileLink
+                                      repoId={`${params.owner}/${params.name}`}
+                                      filePath={href}
+                                    >
+                                      {children}
+                                    </FileLink>
+                                  );
+                                }
+                                // Regular external links
+                                return (
+                                  <a
+                                    href={href}
+                                    className="text-[#f3c9a4] hover:underline"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    {children}
+                                  </a>
+                                );
+                              },
                             }}
                           >
                             {/* Render the typed portion if it exists; otherwise empty */}
