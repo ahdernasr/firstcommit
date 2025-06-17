@@ -1,30 +1,69 @@
-# Next.js SHADCN app
+[Live Frontend](https://firstissue.ai) | [YouTube Demo](https://youtu.be/demo-placeholder)
 
-*Automatically synced with your [v0.dev](https://v0.dev) deployments*
+# FirstIssue
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/ahdernasrs-projects/v0-next-js-shadcn-app)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.dev-black?style=for-the-badge)](https://v0.dev/chat/projects/TPCTmrw7jOo)
+FirstIssue helps developers contribute to open source faster by combining semantic search, AI-guided issue breakdowns, and intelligent context retrieval. It is designed to reduce the time between discovering a repository and making a meaningful contribution.
 
-## Overview
+This project was built for the Google Cloud x MongoDB AI in Action Hackathon.
 
-This repository will stay in sync with your deployed chats on [v0.dev](https://v0.dev).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.dev](https://v0.dev).
+## What It Does
 
-## Deployment
+FirstIssue allows developers to
 
-Your project is live at:
+* Search and discover active GitHub repositories using semantic search powered by vector embeddings
+* Explore open issues with linked code snippets, relevant files, and commit history
+* Get step-by-step guidance on how to resolve issues using a retrieval-augmented generation (RAG) pipeline
+* Understand the structure of large codebases without needing to read every file
 
-**[https://vercel.com/ahdernasrs-projects/v0-next-js-shadcn-app](https://vercel.com/ahdernasrs-projects/v0-next-js-shadcn-app)**
+## Tech Stack
 
-## Build your app
+**Frontend**  
+Next.js, Tailwind CSS, deployed on Vercel
 
-Continue building your app on:
+**Backend**  
+Go (Fiber), REST APIs
 
-**[https://v0.dev/chat/projects/TPCTmrw7jOo](https://v0.dev/chat/projects/TPCTmrw7jOo)**
+**Database**  
+MongoDB Atlas with vector search, Atlas Data Federation
 
-## How It Works
+**AI and Infrastructure**  
+Vertex AI (Gemini API), Google Cloud Storage, Batch Prediction, BigQuery, Dataflow
 
-1. Create and modify your project using [v0.dev](https://v0.dev)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+## Key Features
+
+### Semantic Repository Search
+
+Developers can find repositories to contribute to based on natural language input. The search leverages vector embeddings of repository metadata and README files.
+
+### Issue Contextualization
+
+When a developer selects an issue, FirstIssue retrieves and displays the most relevant parts of the codebase. This is done using semantic search over chunked code embeddings.
+
+### AI-Powered Guidance
+
+Each issue page includes a generated guide that walks through the expected resolution steps. This includes an outline of what the issue is about, which files or functions are involved, and how to get started.
+
+### Pipeline
+
+1. GitHub data is pulled from GH Archive and queried via BigQuery
+2. Repositories are cloned and parsed into code chunks
+3. Embeddings are generated using Vertex AI and stored in MongoDB
+4. When a query is made, relevant chunks are retrieved using Atlas vector search
+5. A prompt is constructed with retrieved content and passed to Gemini for explanation
+
+## Setup Instructions
+
+To run locally:
+
+```bash
+git clone https://github.com/ahmednasr/firstissue.git
+cd firstissue
+
+# Backend
+cd server
+go run main.go
+
+# Frontend
+cd ../web
+npm install
+npm run dev
