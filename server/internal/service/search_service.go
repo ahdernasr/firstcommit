@@ -56,8 +56,8 @@ func (s *searchService) Search(query string) ([]models.Repo, error) {
 	log.Printf("First few values of embedding: %v", vec[:5])
 
 	// Search repositories
-	log.Printf("Performing vector search with k=10...")
-	repos, err := s.repo.VectorSearch(ctx, vec, 10)
+	log.Printf("Performing vector search with k=30...")
+	repos, err := s.repo.VectorSearch(ctx, vec, 30)
 	if err != nil {
 		return nil, fmt.Errorf("vector search failed: %w", err)
 	}

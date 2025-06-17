@@ -4,12 +4,26 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sort"
+	"sync"
 
 	"github.com/ahmednasr/ai-in-action/server/internal/models"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
+
+type vectorSearchResult struct {
+	ID              string   `bson:"_id"`
+	Name            string   `bson:"name"`
+	Description     string   `bson:"description"`
+	StargazersCount int      `bson:"stargazers_count"`
+	ForksCount      int      `bson:"forks_count"`
+	Topics          []string `bson:"topics"`
+	Languages       []string `bson:"languages"`
+	Score           float64  `bson:"score"`
+	RelevanceScore  float64  `bson:"relevance_score"`
+}
 
 // RepoMongo implements the repository interface for MongoDB.
 type RepoMongo struct {
@@ -175,17 +189,7 @@ func (r *RepoMongo) VectorSearch(ctx context.Context, queryVector []float32, k i
 	}
 	defer cursor.Close(ctx)
 
-	var results []struct {
-		ID              string   `bson:"_id"`
-		Name            string   `bson:"name"`
-		Description     string   `bson:"description"`
-		StargazersCount int      `bson:"stargazers_count"`
-		ForksCount      int      `bson:"forks_count"`
-		Topics          []string `bson:"topics"`
-		Languages       []string `bson:"languages"`
-		Score           float64  `bson:"score"`
-		RelevanceScore  float64  `bson:"relevance_score"`
-	}
+	var results []vectorSearchResult
 	if err := cursor.All(ctx, &results); err != nil {
 		return nil, fmt.Errorf("vector search failed: failed to decode results: %w", err)
 	}
@@ -196,30 +200,64 @@ func (r *RepoMongo) VectorSearch(ctx context.Context, queryVector []float32, k i
 			results[0].ID, results[0].Score, results[0].RelevanceScore)
 	}
 
-	// Now, for each result, fetch the full repository metadata from federated DB
-	var enrichedResults []models.Repo
-	for _, result := range results {
-		log.Printf("Looking up metadata for full_name: %s", result.ID)
+	type repoWithIndex struct {
+		index int
+		repo  models.Repo
+	}
+	var (
+		enriched  []repoWithIndex
+		mu        sync.Mutex
+		wg        sync.WaitGroup
+		semaphore = make(chan struct{}, 10)
+	)
 
-		// Use ID (which is the full_name) to fetch full metadata from federated DB
-		fullRepo, err := r.FindByID(ctx, result.ID)
-		if err != nil {
-			log.Printf("Warning: Could not find full metadata for repo %s from federated DB: %v", result.ID, err)
-			continue // Skip if full metadata not found
-		}
-		log.Printf("Found metadata for repo: %s (full_name: %s)", fullRepo.Name, fullRepo.FullName)
-		// Use the vector search score directly instead of the relevance score
-		fullRepo.Score = result.Score
-		enrichedResults = append(enrichedResults, *fullRepo)
+	for i, result := range results {
+		wg.Add(1)
+		semaphore <- struct{}{}
+
+		go func(i int, result vectorSearchResult) {
+			defer wg.Done()
+			defer func() { <-semaphore }()
+
+			log.Printf("Looking up metadata for full_name: %s", result.ID)
+			fullRepo, err := r.FindByID(ctx, result.ID)
+			if err != nil {
+				log.Printf("Warning: Could not find full metadata for repo %s from federated DB: %v", result.ID, err)
+				return
+			}
+			fullRepo.Score = result.Score
+
+			mu.Lock()
+			enriched = append(enriched, repoWithIndex{i, *fullRepo})
+			mu.Unlock()
+
+			log.Printf("Found metadata for repo: %s (full_name: %s)", fullRepo.Name, fullRepo.FullName)
+		}(i, result)
 	}
 
-	log.Printf("Vector search returned %d enriched results", len(enrichedResults))
+	wg.Wait()
 
-	if len(enrichedResults) > 0 {
-		log.Printf("First enriched result score: %v", enrichedResults[0].Score)
-		log.Printf("First enriched result name: %s", enrichedResults[0].Name)
+	sort.Slice(enriched, func(i, j int) bool {
+		return enriched[i].repo.Score > enriched[j].repo.Score
+	})
+
+	finalResults := make([]models.Repo, len(enriched))
+	for i, r := range enriched {
+		finalResults[i] = r.repo
 	}
-	return enrichedResults, nil
+
+	log.Printf("Vector search returned %d enriched results", len(finalResults))
+	if len(finalResults) > 0 {
+		log.Printf("First enriched result score: %v", finalResults[0].Score)
+		log.Printf("First enriched result name: %s", finalResults[0].Name)
+	}
+
+	// Log all results with their scores
+	for i, repo := range finalResults {
+		log.Printf("Result #%d: %s (score: %.4f)", i+1, repo.Name, repo.Score)
+	}
+
+	return finalResults, nil
 }
 
 // CodeVectorSearch performs a vector similarity search on code chunks.
@@ -264,8 +302,55 @@ func (r *RepoMongo) CodeVectorSearch(ctx context.Context, repoID string, queryVe
 		return nil, fmt.Errorf("code vector search failed: failed to decode results: %w", err)
 	}
 
-	log.Printf("Code vector search returned %d results for repo %s", len(results), repoID)
-	return results, nil
+	log.Printf("Code vector search returned %d initial results for repo %s", len(results), repoID)
+
+	type chunkWithIndex struct {
+		index int
+		chunk models.CodeChunk
+	}
+	var (
+		enriched  []chunkWithIndex
+		mu        sync.Mutex
+		wg        sync.WaitGroup
+		semaphore = make(chan struct{}, 10)
+	)
+
+	for i, result := range results {
+		wg.Add(1)
+		semaphore <- struct{}{}
+
+		go func(i int, chunk models.CodeChunk) {
+			defer wg.Done()
+			defer func() { <-semaphore }()
+
+			mu.Lock()
+			enriched = append(enriched, chunkWithIndex{i, chunk})
+			mu.Unlock()
+		}(i, result)
+	}
+
+	wg.Wait()
+
+	sort.Slice(enriched, func(i, j int) bool {
+		return enriched[i].chunk.Score > enriched[j].chunk.Score
+	})
+
+	finalResults := make([]models.CodeChunk, len(enriched))
+	for i, c := range enriched {
+		finalResults[i] = c.chunk
+	}
+
+	log.Printf("Code vector search returned %d enriched results for repo %s", len(finalResults), repoID)
+	if len(finalResults) > 0 {
+		log.Printf("First result score: %.4f", finalResults[0].Score)
+	}
+
+	// Log all results with their scores
+	for i, chunk := range finalResults {
+		log.Printf("Code Result #%d: %s (score: %.4f)", i+1, chunk.File, chunk.Score)
+	}
+
+	return finalResults, nil
 }
 
 // GetTopContextChunks retrieves the most relevant code chunks for a repository.

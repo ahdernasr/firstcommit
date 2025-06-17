@@ -150,14 +150,8 @@ export default function HomePage() {
   };
 
   useEffect(() => {
-    // Only trigger search if a query is active
-    if (searchQuery.trim()) {
-      const debounceTimer = setTimeout(() => {
-        searchRepositories();
-      }, 500);
-      return () => clearTimeout(debounceTimer);
-    } else {
-      // Fetch initial repositories if no search query is active
+    // Only fetch initial repositories if no search query is active
+    if (!searchQuery.trim()) {
       fetchInitialRepositories();
     }
   }, [sortBy, language, selectedTopic, searchQuery]);
