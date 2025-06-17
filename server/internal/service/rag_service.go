@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"strings"
 	"time"
 
@@ -136,11 +138,46 @@ func (s *RAGService) GenerateResponse(ctx context.Context, req RAGRequest) (*RAG
 
 	// 6. Get the issue details and guide
 	var guide models.Guide
+	var issueDetails string
 	if req.IssueNumber != "" {
 		issueID := req.RepoID + "#" + req.IssueNumber
 		guide, err = s.guideSvc.GetGuide(ctx, issueID)
 		if err != nil {
 			log.Printf("Warning: Failed to get guide for issue %s: %v", issueID, err)
+		} else if guide.Issue.Title != "" && guide.Issue.Body != "" {
+			// Use cached issue details
+			issueDetails = fmt.Sprintf("Title: %s\n\nDescription:\n%s", guide.Issue.Title, guide.Issue.Body)
+		} else {
+			// Fallback to GitHub API
+			log.Printf("Guide is missing issue details. Fetching from GitHub API...")
+			url := fmt.Sprintf("https://api.github.com/repos/%s/issues/%s", req.RepoID, req.IssueNumber)
+			reqCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+
+			type ghIssue struct {
+				Title string `json:"title"`
+				Body  string `json:"body"`
+			}
+
+			httpReq, err := http.NewRequestWithContext(reqCtx, "GET", url, nil)
+			if err != nil {
+				log.Printf("Failed to create GitHub request: %v", err)
+			} else {
+				httpReq.Header.Set("Accept", "application/vnd.github+json")
+				client := &http.Client{}
+				resp, err := client.Do(httpReq)
+				if err != nil {
+					log.Printf("Failed to fetch GitHub issue: %v", err)
+				} else {
+					defer resp.Body.Close()
+					var gh ghIssue
+					if err := json.NewDecoder(resp.Body).Decode(&gh); err != nil {
+						log.Printf("Failed to decode GitHub issue response: %v", err)
+					} else {
+						issueDetails = fmt.Sprintf("Title: %s\n\nDescription:\n%s", gh.Title, gh.Body)
+					}
+				}
+			}
 		}
 	}
 
@@ -162,16 +199,23 @@ Please provide a clear and helpful answer that:
 1. Directly addresses the user's question
 2. References specific parts of the code when relevant
 3. Uses markdown links in the format [filename](filepath) when referencing files
+• If a file path has more than 6 segments (e.g., a/b/c/d/e/f/g), truncate the middle using `+"`...`"+` like a/b/c/.../e/f/g for display, but keep the full filepath in the markdown link.
 4. Maintains a professional and technical tone
 5. Focuses on helping the user understand and solve the issue
+6. Remember that most if not all questions have the goal or the need of solving the issue.  IMPORTANT!
+
+IMPORTANT NOTE: 
+You will always be given code snippets. Sometimes the users response will not require new snippets, and you will not have to use them in your response. 
+Sometimes they will ask about the snippets in the first-time contributor guide which you will have to respond to. 
 
 Formatting Rules
 • Use level 2 headers (##) for top-level sections.
 • Use level 3 headers (###) for optional sub-sections if needed.
 • Use bullet points or numbered steps for procedures.
-• Use fenced code blocks (%[1]s) for code snippets.
+• Use fenced code blocks(%[1]s) for code snippets.
 • Use markdown links for file references: [filename](filepath)
-• Do not use convential number a number should be followed by ) in a numbered list, such as 1) 2) 3)
+• If a file path has more than 6 segments (e.g., a/b/c/d/e/f/g), truncate the middle using `+"`...`"+` like a/b/c/.../e/f/g for display, but keep the full filepath in the markdown link.
+• Do not use conventional number a number should be followed by ) in a numbered list, such as 1) 2) 3)
 • **All bullets and numbered steps must place their description on the same line**. Example: 1) Run the test not 1)\nRun the tests. Make sure no formatting glitch causes this to happen.
 • You must not break to a new line after 1) or •. The description must follow immediately on the same line. 
 • If a break after a numbered step or a bullet is done then the output is considered invalid. 
@@ -179,7 +223,7 @@ Formatting Rules
 Failure to follow any rules will deem the response invalid. 
 
 Your response should be in markdown format and should not include any meta-commentary or disclaimers.`,
-		req.Query,    // Issue details
+		issueDetails, // Formatted issue details
 		guide.Answer, // Guide content
 		formatSources(sources),
 		req.Query) // User's question
@@ -250,6 +294,7 @@ Output Requirements
 • Keep total length between 400–700 words.
 • Use 2 to 3 code snippets (in fenced code blocks using triple backticks, not indented).
 • When referencing files, use markdown links in the format [filename](filepath). For example, if you want to reference a file at src/main.go, write it as [main.go](src/main.go).
+• If a file path has more than 6 segments (e.g., a/b/c/d/e/f/g), truncate the middle using `+"`...`"+` like a/b/c/.../e/f/g for display, but keep the full filepath in the markdown link.
 
 ⸻
 
@@ -259,6 +304,7 @@ Formatting Rules
 • Use bullet points or numbered steps for procedures.
 • Use fenced code blocks (%[1]s) for code snippets.
 • Use markdown links for file references: [filename](filepath)
+• If a file path has more than 6 segments (e.g., a/b/c/d/e/f/g), truncate the middle using `+"`...`"+` like a/b/c/.../e/f/g for display, but keep the full filepath in the markdown link.
 • Do not use convential number a number should be followed by ) in a numbered list, such as 1) 2) 3)
 • **All bullets and numbered steps must place their description on the same line**. Example: 1) Run the test not 1)\nRun the tests. Make sure no formatting glitch causes this to happen.
 • You must not break to a new line after 1) or •. The description must follow immediately on the same line. 
@@ -348,10 +394,19 @@ Write a guide that helps a junior developer contribute confidently without prior
 func formatSources(sources []Source) string {
 	var sb strings.Builder
 	for _, s := range sources {
-		sb.WriteString(fmt.Sprintf("File: [%s](%s)\n", s.FilePath, s.FilePath))
+		truncatedPath := truncateFilePath(s.FilePath)
+		sb.WriteString(fmt.Sprintf("File: [%s](%s)\n", truncatedPath, s.FilePath))
 		sb.WriteString("Content:\n```\n")
 		sb.WriteString(s.Content)
 		sb.WriteString("\n```\n\n")
 	}
 	return sb.String()
+}
+
+func truncateFilePath(path string) string {
+	parts := strings.Split(path, "/")
+	if len(parts) > 6 {
+		return strings.Join(parts[:3], "/") + "/.../" + strings.Join(parts[len(parts)-3:], "/")
+	}
+	return path
 }

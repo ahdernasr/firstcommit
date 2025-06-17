@@ -208,7 +208,7 @@ export default function IssuePage() {
           }
         }, 5000)
       }
-    }, 30) // Typing speed
+    }, 1) // Super fast typing: 1ms
 
     return () => clearInterval(typeInterval)
   }, [guideLoading, loadingStep])
@@ -221,7 +221,7 @@ export default function IssuePage() {
     }
   }, [guideLoading])
 
-  // Typing-effect: reveal one character at a time (much faster: 5ms)
+  // Typing-effect: reveal one character at a time (super fast: 1ms)
   useEffect(() => {
     const lastMessage = messages[messages.length - 1]
     if (!lastMessage || lastMessage.role !== "assistant") {
@@ -243,7 +243,7 @@ export default function IssuePage() {
         setShouldAutoScroll(true)
         // Scroll after each character is added
         scrollToBottom()
-      }, 1) // *** FAST TYPING: 1ms ***
+      }, 1) // Super fast typing: 1ms
       return () => clearTimeout(timer)
     } else {
       setIsTyping(false)
@@ -309,6 +309,7 @@ export default function IssuePage() {
       const requestBody = {
         query: input.trim(),
         repo_id: `${params.owner}/${params.name}`,
+        issue_number: params.number,
       }
       console.log("Sending request:", requestBody)
 
