@@ -108,7 +108,7 @@ func main() {
 	chatSvc := service.NewChatService(guideSvc)
 
 	// Use code embedder for RAG service
-	ragService := service.NewRAGService(mainDB.Collection("repos_code"), mainDB.Collection("repos_meta"), codeEmbedder, llm)
+	ragService := service.NewRAGService(mainDB.Collection("repos_code"), mainDB.Collection("repos_meta"), codeEmbedder, llm, guideSvc)
 
 	// Initialize handlers
 	healthHandler := handler.NewHealthHandler(mainClient, federatedClient)

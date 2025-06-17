@@ -159,6 +159,7 @@ export default function IssuePage() {
           body: JSON.stringify({
             query: issue.title + "\n\n" + issue.body,
             repo_id: `${params.owner}/${params.name}`,
+            issue_number: params.number,
           }),
         })
 
@@ -183,7 +184,7 @@ export default function IssuePage() {
     }
 
     fetchGuide()
-  }, [issue, params.owner, params.name])
+  }, [issue, params.owner, params.name, params.number])
 
   // Handle loading message typing animation
   useEffect(() => {
@@ -242,7 +243,7 @@ export default function IssuePage() {
         setShouldAutoScroll(true)
         // Scroll after each character is added
         scrollToBottom()
-      }, 0.01) // *** FAST TYPING: 1ms ***
+      }, 1) // *** FAST TYPING: 1ms ***
       return () => clearTimeout(timer)
     } else {
       setIsTyping(false)

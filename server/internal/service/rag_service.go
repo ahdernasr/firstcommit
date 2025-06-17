@@ -3,8 +3,11 @@ package service
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
+	"time"
 
+	"github.com/ahmednasr/ai-in-action/server/internal/models"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 )
@@ -19,21 +22,24 @@ type RAGService struct {
 	metadataColl *mongo.Collection
 	embedder     Embedder
 	llm          LLM
+	guideSvc     GuideService
 }
 
-func NewRAGService(codeColl, metadataColl *mongo.Collection, embedder Embedder, llm LLM) *RAGService {
+func NewRAGService(codeColl, metadataColl *mongo.Collection, embedder Embedder, llm LLM, guideSvc GuideService) *RAGService {
 	return &RAGService{
 		codeColl:     codeColl,
 		metadataColl: metadataColl,
 		embedder:     embedder,
 		llm:          llm,
+		guideSvc:     guideSvc,
 	}
 }
 
 type RAGRequest struct {
-	Query      string `json:"query"`
-	RepoID     string `json:"repo_id,omitempty"`
-	MaxResults int    `json:"max_results,omitempty"`
+	Query       string `json:"query"`
+	RepoID      string `json:"repo_id,omitempty"`
+	IssueNumber string `json:"issue_number,omitempty"` // GitHub issue number (e.g., "51878")
+	MaxResults  int    `json:"max_results,omitempty"`
 }
 
 type RAGResponse struct {
@@ -128,19 +134,55 @@ func (s *RAGService) GenerateResponse(ctx context.Context, req RAGRequest) (*RAG
 		}
 	}
 
-	// 6. Generate answer using Vertex AI
-	prompt := fmt.Sprintf(`Based on this GitHub issue and relevant code snippets, provide a detailed guide:
+	// 6. Get the issue details and guide
+	var guide models.Guide
+	if req.IssueNumber != "" {
+		issueID := req.RepoID + "#" + req.IssueNumber
+		guide, err = s.guideSvc.GetGuide(ctx, issueID)
+		if err != nil {
+			log.Printf("Warning: Failed to get guide for issue %s: %v", issueID, err)
+		}
+	}
 
-Issue Title: %s
-Issue Description: %s
+	// 7. Generate answer using Vertex AI with enhanced prompt
+	prompt := fmt.Sprintf(`You are an AI assistant helping a developer understand and work on a GitHub issue. Use the following context to answer the user's question:
+
+Issue Details:
+%s
+
+First-Time Contributor Guide:
+%s
 
 Relevant Code Snippets:
 %s
 
-Please provide a comprehensive guide that addresses the issue. When referencing files, use markdown links in the format [filename](filepath). For example, if you want to reference a file at src/main.go, write it as [main.go](src/main.go).`,
-		req.Query,
-		req.Query,
-		formatSources(sources))
+User's Question: %s
+
+Please provide a clear and helpful answer that:
+1. Directly addresses the user's question
+2. References specific parts of the code when relevant
+3. Uses markdown links in the format [filename](filepath) when referencing files
+4. Maintains a professional and technical tone
+5. Focuses on helping the user understand and solve the issue
+
+Formatting Rules
+• Use level 2 headers (##) for top-level sections.
+• Use level 3 headers (###) for optional sub-sections if needed.
+• Use bullet points or numbered steps for procedures.
+• Use fenced code blocks (%[1]s) for code snippets.
+• Use markdown links for file references: [filename](filepath)
+• Do not use convential number a number should be followed by ) in a numbered list, such as 1) 2) 3)
+• **All bullets and numbered steps must place their description on the same line**. Example: 1) Run the test not 1)\nRun the tests. Make sure no formatting glitch causes this to happen.
+• You must not break to a new line after 1) or •. The description must follow immediately on the same line. 
+• If a break after a numbered step or a bullet is done then the output is considered invalid. 
+
+Failure to follow any rules will deem the response invalid. 
+
+Your response should be in markdown format and should not include any meta-commentary or disclaimers.`,
+		req.Query,    // Issue details
+		guide.Answer, // Guide content
+		formatSources(sources),
+		req.Query) // User's question
 
 	answer, err := s.llm.GenerateResponse(ctx, prompt)
 	if err != nil {
@@ -155,14 +197,42 @@ Please provide a comprehensive guide that addresses the issue. When referencing 
 }
 
 func (s *RAGService) GenerateGuide(ctx context.Context, req RAGRequest) (*RAGResponse, error) {
-	// Just reuse the existing RAG functionality with a different prompt
+	log.Printf("[Guide Generation] Starting guide generation for repo: %s, issue: %s", req.RepoID, req.IssueNumber)
+
+	// Validate required fields
+	if req.IssueNumber == "" {
+		log.Printf("[Guide Generation] Missing issue number in request")
+		return nil, fmt.Errorf("issue number is required")
+	}
+
+	// Check cache first
+	issueID := req.RepoID + "#" + req.IssueNumber
+	guide, err := s.guideSvc.GetGuide(ctx, issueID)
+	if err == nil && guide.ID != "" {
+		log.Printf("[Guide Generation] Found cached guide for issue: %s", issueID)
+		return &RAGResponse{
+			Guide: guide.Answer,
+		}, nil
+	}
+	log.Printf("[Guide Generation] No cached guide found, generating new guide for issue: %s", issueID)
+
+	// Generate new guide using RAG
 	resp, err := s.GenerateResponse(ctx, req)
 	if err != nil {
+		log.Printf("[Guide Generation] Error generating initial response: %v", err)
 		return nil, fmt.Errorf("failed to generate guide: %w", err)
 	}
+	log.Printf("[Guide Generation] Successfully generated initial response")
 
 	// Update the prompt to generate a guide
 	guidePrompt := fmt.Sprintf(`
+
+IMPORTANT: When generating the guide below:
+- DO NOT put the content of any step on a new line after 1), 2), etc.
+- Do NOT format numbered steps or bullets with * or ** or other characters that cause indentation or list parsing.
+- DO NOT indent or break lines between the number and the description.
+- Every bullet point or step must stay on the SAME line as its description. If you break after 1), your output will be considered INVALID. Now follow the instructions below:
+
 You are generating a first-time contributor guide for a GitHub issue using retrieval-augmented context. You will be given:
 • A GitHub issue describing a bug or feature request.
 • A list of relevant files extracted from the codebase.
@@ -210,7 +280,7 @@ Summarize the relevant background from the issue—prior behavior, technical gap
 
 ## Files to Review
 
-For each file provided (make sure you include each source provided), use markdown links to reference them:
+For each file provided (make sure you include each source provided), use markdown links to reference them. it should always be the full filename and full filepath never cut them down. Always break a line between the repo link and its description.
 
 > [filename](filepath)
 
@@ -220,7 +290,7 @@ Do not use bullet points or numbers to list the file paths. Only use block quote
 
 ## How to Fix
 • Outline where and how to make the required changes.
-• Reference specific file paths using markdown links: [filename](filepath)
+• Reference specific file paths using markdown links, it should always be the full filename and full filepath never cut them down: [filename](filepath). 
 • Use bullet points or numbered steps.
 • Assume beginner familiarity with the codebase.
 
@@ -245,16 +315,33 @@ Relevant Files:
 Write a guide that helps a junior developer contribute confidently without prior repo experience.`,
 		"```markdown, do not wrap the code in ```. If you do either, your answer is invalid.", req.Query, formatSources(resp.Sources))
 
-	guide, err := s.llm.GenerateResponse(ctx, guidePrompt)
+	guideContent, err := s.llm.GenerateResponse(ctx, guidePrompt)
 	if err != nil {
+		log.Printf("[Guide Generation] Error generating guide content: %v", err)
 		return nil, fmt.Errorf("failed to generate guide: %w", err)
+	}
+	log.Printf("[Guide Generation] Successfully generated guide content")
+
+	// Create a guide model and cache it
+	guideModel := models.Guide{
+		ID:        issueID,
+		Answer:    guideContent,
+		CreatedAt: time.Now(),
+	}
+
+	// Cache the guide in MongoDB
+	log.Printf("[Guide Generation] Attempting to cache guide for issue: %s", issueID)
+	if err := s.guideSvc.Upsert(ctx, guideModel); err != nil {
+		log.Printf("[Guide Generation] Failed to cache guide for issue %s: %v", issueID, err)
+	} else {
+		log.Printf("[Guide Generation] Successfully cached guide for issue: %s", issueID)
 	}
 
 	return &RAGResponse{
 		Answer:     resp.Answer,
 		Sources:    resp.Sources,
 		Confidence: resp.Confidence,
-		Guide:      guide,
+		Guide:      guideContent,
 	}, nil
 }
 

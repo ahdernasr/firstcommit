@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -33,6 +35,7 @@ type RepoRepository interface {
 // GuideService generates or retrieves an AI guide for a GitHub issue.
 type GuideService interface {
 	GetGuide(ctx context.Context, issueID string) (models.Guide, error)
+	Upsert(ctx context.Context, guide models.Guide) error
 }
 
 type guideService struct {
@@ -62,28 +65,66 @@ func NewGuideService(
 
 // GetGuide returns a cached guide or generates a new one via RAG.
 func (s *guideService) GetGuide(ctx context.Context, issueID string) (models.Guide, error) {
-	// 1. Check cache.
-	guide, err := s.guideRepo.FindByIssueID(ctx, issueID)
-	if err == nil && guide.ID != "" {
-		return guide, nil
+	log.Printf("[Guide Service] Getting guide for issue: %s", issueID)
+
+	// Split the issue ID into repo and number parts
+	parts := strings.Split(issueID, "#")
+	if len(parts) != 2 {
+		log.Printf("[Guide Service] Invalid issue ID format (expected owner/repo#number): %s", issueID)
+		return models.Guide{}, fmt.Errorf("invalid issue ID format")
 	}
 
+	repoPart := parts[0]
+	numberPart := parts[1]
+
+	// Create the cache key using the repo and issue number
+	cacheKey := fmt.Sprintf("%s#%s", repoPart, numberPart)
+	log.Printf("[Guide Service] Looking up guide with cache key: %s", cacheKey)
+
+	// 1. Check cache.
+	guide, err := s.guideRepo.FindByIssueID(ctx, cacheKey)
+	if err == nil && guide.ID != "" {
+		log.Printf("[Guide Service] Found cached guide for issue: %s", cacheKey)
+		return guide, nil
+	}
+	log.Printf("[Guide Service] No cached guide found for issue: %s", cacheKey)
+
 	// 2. Fetch issue info from GitHub.
-	owner, repo, num := parseIssueID(issueID) // helper splits "owner/repo#123"
+	repoParts := strings.Split(repoPart, "/")
+	if len(repoParts) != 2 {
+		log.Printf("[Guide Service] Invalid repo format in ID %s: %s", issueID, repoPart)
+		return models.Guide{}, fmt.Errorf("invalid repo format")
+	}
+
+	owner, repo := repoParts[0], repoParts[1]
+	num, err := strconv.Atoi(numberPart)
+	if err != nil {
+		log.Printf("[Guide Service] Invalid issue number in ID %s: %v", issueID, err)
+		return models.Guide{}, fmt.Errorf("invalid issue number: %w", err)
+	}
+
+	log.Printf("[Guide Service] Fetching issue info from GitHub: owner=%s, repo=%s, number=%d", owner, repo, num)
 	issue, err := s.gh.GetIssue(owner, repo, num)
 	if err != nil {
+		log.Printf("[Guide Service] Error fetching issue from GitHub: %v", err)
 		return models.Guide{}, err
 	}
+	log.Printf("[Guide Service] Successfully fetched issue from GitHub")
 
 	// 3. Retrieve top‑k context chunks (code, README) from Mongo vector index.
 	repoDoc, err := s.repoRepo.FindByID(ctx, repo)
 	if err != nil {
+		log.Printf("[Guide Service] Error finding repo document: %v", err)
 		return models.Guide{}, err
 	}
+	log.Printf("[Guide Service] Found repo document: %s", repoDoc.ID)
+
 	chunks, err := s.repoRepo.GetTopContextChunks(ctx, repoDoc.ID, 20)
 	if err != nil {
+		log.Printf("[Guide Service] Error getting context chunks: %v", err)
 		return models.Guide{}, err
 	}
+	log.Printf("[Guide Service] Retrieved %d context chunks", len(chunks))
 
 	// Convert CodeChunks to strings for the LLM
 	chunkTexts := make([]string, len(chunks))
@@ -92,10 +133,14 @@ func (s *guideService) GetGuide(ctx context.Context, issueID string) (models.Gui
 	}
 
 	// 4. Run local LLM with RAG prompt.
+	log.Printf("[Guide Service] Generating guide using LLM")
 	answer, err := s.llm.GenerateGuide(issue, chunkTexts)
 	if err != nil {
+		log.Printf("[Guide Service] Error generating guide with LLM: %v", err)
 		return models.Guide{}, err
 	}
+	log.Printf("[Guide Service] Successfully generated guide with LLM")
+	log.Printf("[Guide Service] Generated guide length: %d", len(answer))
 
 	// 5. Persist guide.
 	guide = models.Guide{
@@ -104,37 +149,26 @@ func (s *guideService) GetGuide(ctx context.Context, issueID string) (models.Gui
 		Issue:     issue,
 		CreatedAt: time.Now(),
 	}
+	log.Printf("[Guide Service] Attempting to persist guide to MongoDB")
+	log.Printf("[Guide Service] Guide ID: %s", guide.ID)
+	log.Printf("[Guide Service] Guide content length: %d", len(guide.Answer))
+
 	if err := s.guideRepo.Upsert(ctx, guide); err != nil {
+		log.Printf("[Guide Service] Error persisting guide to MongoDB: %v", err)
 		return guide, err // guide still has value
 	}
+	log.Printf("[Guide Service] Successfully persisted guide to MongoDB")
 
 	return guide, nil
 }
 
-// ---- Helpers & local interfaces -------------------------------------------
-
-// parseIssueID converts "owner/repo#123" → ("owner","repo",123)
-func parseIssueID(id string) (owner, repo string, number int) {
-	// Split by # to separate the repo part from the number
-	parts := strings.Split(id, "#")
-	if len(parts) != 2 {
-		return "", "", 0
-	}
-
-	// Parse the number
-	num, err := strconv.Atoi(parts[1])
-	if err != nil {
-		return "", "", 0
-	}
-
-	// Split the repo part by / to get owner and repo name
-	repoParts := strings.Split(parts[0], "/")
-	if len(repoParts) != 2 {
-		return "", "", 0
-	}
-
-	return repoParts[0], repoParts[1], num
+// Upsert inserts or replaces a guide in the repository.
+func (s *guideService) Upsert(ctx context.Context, guide models.Guide) error {
+	log.Printf("[Guide Service] Upserting guide for issue: %s", guide.ID)
+	return s.guideRepo.Upsert(ctx, guide)
 }
+
+// ---- Helpers & local interfaces -------------------------------------------
 
 // EmbeddingClient abstracts your local embedding model.
 type EmbeddingClient interface {
