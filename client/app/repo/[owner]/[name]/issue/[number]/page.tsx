@@ -524,7 +524,7 @@ export default function IssuePage() {
           </CardHeader>
 
           {issue.body && (
-            <CardContent className="p-6 pt-0">
+            <CardContent className="p-6 pt-3">
               <div className="prose prose-md3 max-w-none text-[#f3f3f3] leading-relaxed">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
@@ -741,7 +741,7 @@ export default function IssuePage() {
           </CardContent>
         </Card>
 
-        <Separator className="mb-12 bg-[#515b65]" />
+        {!guideLoading && <Separator className="mb-12 bg-[#515b65]" /> }
 
         {/* AI Chat Interface */}
         {!guideLoading && (
