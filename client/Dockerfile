@@ -8,8 +8,19 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
-# Copy source code
-COPY . .
+# Copy only necessary files for build
+COPY next.config.mjs ./
+COPY tsconfig.json ./
+COPY postcss.config.mjs ./
+COPY tailwind.config.ts ./
+COPY components.json ./
+COPY next-env.d.ts ./
+COPY public ./public
+COPY app ./app
+COPY components ./components
+COPY lib ./lib
+COPY styles ./styles
+COPY hooks ./hooks
 
 # Set build-time environment variables
 ARG NEXT_PUBLIC_API_URL

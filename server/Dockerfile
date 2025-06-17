@@ -49,6 +49,11 @@ FROM python:3.11-slim-bullseye
 # Set working directory
 WORKDIR /app
 
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy virtual environment from builder
 COPY --from=python-builder /app/venv /app/venv
 ENV PATH="/app/venv/bin:$PATH"

@@ -123,10 +123,11 @@ func main() {
 
 	// Add middleware
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: "https://frontend-222198140851.us-central1.run.app,http://localhost:3000",
-		AllowMethods: "GET,POST,PUT,DELETE,OPTIONS",
-		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
-		MaxAge:       300, // Cache preflight requests for 5 minutes
+		AllowOrigins:     "https://frontend-222198140851.us-central1.run.app,http://localhost:3000",
+		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
+		AllowCredentials: true,
+		MaxAge:           300, // Cache preflight requests for 5 minutes
 	}))
 	app.Use(logger.New())
 	app.Use(recover.New())
