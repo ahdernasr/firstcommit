@@ -1,4 +1,4 @@
-# FirstIssue
+# FirstCommit
 
 FirstIssue helps developers contribute to open source faster by combining semantic search, AI-guided issue breakdowns, and intelligent context retrieval. It is designed to reduce the time between discovering a repository and making a meaningful contribution.
 
