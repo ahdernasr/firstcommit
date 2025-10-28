@@ -1,12 +1,12 @@
 # FirstCommit
 
-FirstIssue helps developers contribute to open source faster by combining semantic search, AI-guided issue breakdowns, and intelligent context retrieval. It is designed to reduce the time between discovering a repository and making a meaningful contribution.
+FirstCommit helps developers contribute to open source faster by combining semantic search, AI-guided issue breakdowns, and intelligent context retrieval. It is designed to reduce the time between discovering a repository and making a meaningful contribution.
 
 This project was built for the Google Cloud x MongoDB AI in Action Hackathon.
 
 ## What It Does
 
-FirstIssue allows developers to
+FirstCommit allows developers to
 
 * Search and discover active GitHub repositories using semantic search powered by vector embeddings
 * Explore open issues with linked code snippets, relevant files, and commit history
